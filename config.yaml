@@ -1,0 +1,48 @@
+regime_engine:
+  lookback_period: 100
+  adx_period: 14
+  atr_period: 14
+  bb_period: 20
+  bb_stddev: 2
+  weight_h4: 0.6
+  weight_h1: 0.4
+  recalc_trigger: "H1_candle_close"
+
+confluence_engine:
+  weights:
+    structure: 0.30
+    momentum: 0.25
+    trend: 0.20
+    fundamental: 0.15
+    sentiment: 0.10
+  threshold_strong: 75
+  threshold_moderate: 60
+
+ai_decision_engine:
+  confidence_reject_below: 60
+  confidence_flag_review_above: 90
+  max_confidence_cap_for_sizing: 85
+
+risk_engine:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 3.0
+  max_weekly_loss_pct: 5.0
+  max_drawdown_hard_stop_pct: 20.0
+  min_risk_reward: 1.5
+  consecutive_loss_reduce_at: 3
+  consecutive_loss_reduce_factor: 0.5
+  consecutive_loss_pause_at: 5
+  pause_duration_hours: 24
+
+backtest:
+  in_sample_ratio: 0.6
+  out_of_sample_ratio: 0.2
+  holdout_ratio: 0.2
+  monte_carlo_simulations: 1000
+  max_acceptable_expectancy_deviation_pct: 30
+
+calibration:
+  min_total_sample: 30
+  min_sample_per_bin: 10
+  max_calibration_error_pct: 15
+  target_brier_score: 0.22
