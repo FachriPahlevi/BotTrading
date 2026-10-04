@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Download, RefreshCw, ScrollText } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getJson } from '@/lib/api'
+import { useDiagnosticsData } from '@/hooks/useDiagnosticsData'
+
 
 interface LogEvent {
   id: number
@@ -29,19 +29,14 @@ interface Diagnostics {
     explanation: string
   }
 }
-
 export function LogPanel() {
+
   const [paused, setPaused] = useState(false)
   const [level, setLevel] = useState('ALL')
   const [source, setSource] = useState('ALL')
   const [search, setSearch] = useState('')
-  const logs = useQuery({
-    queryKey: ['diagnostics'],
-    queryFn: ({ signal }) => getJson<Diagnostics>('/api/diagnostics', signal),
-    refetchInterval: paused ? false : 5_000,
-    refetchOnWindowFocus: !paused,
-    retry: false,
-  })
+  const logs = useDiagnosticsData(paused)
+
   const data = logs.data
   const events = (data?.events ?? []).filter(event =>
     (level === 'ALL' || event.level === level) && (source === 'ALL' || event.source === source)

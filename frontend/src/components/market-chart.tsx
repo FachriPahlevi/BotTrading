@@ -13,10 +13,15 @@ import {
   MoveUpRight,
   RotateCcw,
   Square,
+
   Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { Market, Signal } from '@/lib/api'
+import { number, type ChartOverlayItem, type Market, type Signal } from '@/lib/api'
+
+
+
+
 
 const periods: Record<string, Period> = {
   '1m': { type: 'minute', span: 1 },
@@ -150,6 +155,9 @@ export function MarketChart({
     if (!instance) return
     instance.removeOverlay({ groupId: 'signal' })
     if (signal) {
+      setNotice(
+        `Highlight sinyal #${signal.id} (${signal.symbol}): Entry ${number(signal.entry, 5)}, SL ${number(signal.stop_loss, 5)}.`,
+      )
       for (const [label, price, color] of [
         ['Entry', signal.entry, '#e2b76e'],
         ['Stop loss', signal.stop_loss, '#f07b86'],
@@ -165,6 +173,7 @@ export function MarketChart({
       }
     }
   }, [signal])
+
 
   useEffect(() => {
     const instance = chart.current

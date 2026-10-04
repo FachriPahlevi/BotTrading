@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/theme.css?v=2">
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=4">
-  <script src="/static/js/dashboard.js?v=3" defer></script>
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=5">
+  <script src="/static/js/dashboard.js?v=4" defer></script>
 </head>
 <body>
   <!-- Top Navigation -->
@@ -21,191 +21,236 @@
       <span class="ticker-label">XAUUSDm</span> 
       <em id="ticker-xau" class="ticker-value">Waiting for feed</em>
     </div>
-    <div class="nav-metrics">
-      <div class="metric-chip">
-        <small>Latest Regime</small>
-        <span id="latest-regime">Loading...</span>
-      </div>
-      <div class="metric-chip">
-        <small>AI Confidence</small>
-        <span id="avg-confluence">-</span>
-      </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="tab-workspace">Workspace</button>
+      <button class="nav-tab" data-tab="tab-activity">Aktivitas & Scanner</button>
+      <button class="nav-tab" data-tab="tab-risk">Anggaran Risiko</button>
+      <button class="nav-tab" data-tab="tab-fundamental">Konteks Pasar</button>
+      <button class="nav-tab" data-tab="tab-logs">Log Sistem</button>
     </div>
     <div class="nav-status">
       <i id="market-source">Connecting to HFM MT5...</i>
     </div>
   </nav>
 
-  <div class="layout-container">
-    
-    <!-- LEFT PANEL: Scanner & Automation -->
-    <aside class="panel-left">
-      <!-- P7 Market Scanner -->
-      <div class="glass-panel">
-        <div class="panel-header">
-          <h2>Market Scanner <span class="badge outline">P7</span></h2>
-        </div>
-        <div class="segmented-control">
-          <button class="seg-btn">Forex</button>
-          <button class="seg-btn active">Metals</button>
-          <button class="seg-btn">Crypto</button>
-        </div>
-        <ul class="scanner-list">
-          <li class="scanner-item active">
-            <div class="asset-info">
-              <strong>XAUUSDm</strong>
-              <small>Gold vs USD</small>
+  <!-- TAB 1: WORKSPACE (Main Clean Trading Center) -->
+  <div id="tab-workspace" class="tab-content active">
+    <div class="layout-container" style="grid-template-columns: 1fr 340px;">
+      <main class="panel-center">
+        <!-- Market Chart Widget -->
+        <div class="glass-panel chart-widget">
+          <div class="chart-header">
+            <div class="chart-controls">
+              <select id="market-symbol" class="sleek-select">
+                <option value="XAUUSDm" selected>XAUUSDm</option>
+                <option value="XAUUSD">XAU / USD</option>
+                <option value="GOLD">GOLD</option>
+              </select>
+              <select id="market-interval" class="sleek-select">
+                <option value="5m">5m</option>
+                <option value="15m">15m</option>
+                <option value="1h" selected>1h</option>
+                <option value="4h">4h</option>
+                <option value="1d">1d</option>
+              </select>
             </div>
-            <span class="badge gold glow">Top Setup</span>
-          </li>
-          <li class="scanner-item">
-            <div class="asset-info">
-              <strong>XAGUSDm</strong>
-              <small>Silver vs USD</small>
+            <div class="price-display">
+              <strong id="market-price">--</strong>
+              <span id="market-change">--%</span>
             </div>
-            <span class="badge muted">Ranging</span>
-          </li>
-        </ul>
-      </div>
+          </div>
+          
+          <div id="chart-wrap">
+            <canvas id="market-chart"></canvas>
+          </div>
 
-      <!-- P5/P6 Automation Controls -->
-      <div class="glass-panel automation-panel">
-        <div class="panel-header">
-          <h2>AI Automation <span class="badge outline">P5/P6</span></h2>
-        </div>
-        <div class="mode-toggle">
-          <button class="mode-btn active">PAPER</button>
-          <button class="mode-btn">DEMO</button>
-        </div>
-        <div class="action-grid">
-          <button class="btn primary glow pulse-on-hover">Start AI Trading</button>
-          <button class="btn warning">Pause Entries</button>
-          <button class="btn danger full-width">Force Close AI Positions</button>
-        </div>
-        <div class="evaluation-metrics">
-          <div class="eval-stat">
-            <small>Backtest Win Rate</small>
-            <strong>--%</strong>
-          </div>
-          <div class="eval-stat">
-            <small>Fwd Eval</small>
-            <span class="badge muted">Pending</span>
+          <div class="toggles">
+            <label><input data-indicator="sma_20" type="checkbox" checked> SMA 20</label>
+            <label><input data-indicator="ema_50" type="checkbox" checked> EMA 50</label>
+            <label><input data-indicator="bollinger" type="checkbox"> Bollinger</label>
+            <label><input data-indicator="rsi_14" type="checkbox"> RSI 14</label>
+            <label><input data-indicator="macd" type="checkbox"> MACD</label>
+            <label><input data-indicator="trade_signals" type="checkbox" checked> Signals</label>
           </div>
         </div>
-      </div>
-    </aside>
+      </main>
 
-    <!-- CENTER PANEL: Chart & AI Analysis -->
-    <main class="panel-center">
-      <!-- Market Chart Widget -->
-      <div class="glass-panel chart-widget">
-        <div class="chart-header">
-          <div class="chart-controls">
-            <select id="market-symbol" class="sleek-select">
-              <option value="XAUUSDm" selected>XAUUSDm</option>
-              <option value="XAUUSD">XAU / USD</option>
-              <option value="GOLD">GOLD</option>
-            </select>
-            <select id="market-interval" class="sleek-select">
-              <option value="5m">5m</option>
-              <option value="15m">15m</option>
-              <option value="1h" selected>1h</option>
-              <option value="4h">4h</option>
-              <option value="1d">1d</option>
-            </select>
+      <aside class="panel-right">
+        <!-- P2 AI Analysis Panel -->
+        <div class="glass-panel ai-analysis">
+          <div class="panel-header">
+            <h2>AI Analyst <span class="badge outline">P2</span></h2>
+            <span id="ai-provider-tag" class="badge success">Ready</span>
           </div>
-          <div class="price-display">
-            <strong id="market-price">--</strong>
-            <span id="market-change">--%</span>
-          </div>
-        </div>
-        
-        <div id="chart-wrap">
-          <canvas id="market-chart"></canvas>
-        </div>
-
-        <div class="toggles">
-          <label><input data-indicator="sma_20" type="checkbox" checked> SMA 20</label>
-          <label><input data-indicator="ema_50" type="checkbox" checked> EMA 50</label>
-          <label><input data-indicator="bollinger" type="checkbox"> Bollinger</label>
-          <label><input data-indicator="rsi_14" type="checkbox"> RSI 14</label>
-          <label><input data-indicator="macd" type="checkbox"> MACD</label>
-          <label><input data-indicator="trade_signals" type="checkbox" checked> Signals</label>
-        </div>
-      </div>
-
-      <!-- P2 AI Analysis -->
-      <div class="glass-panel ai-analysis">
-        <div class="panel-header">
-          <h2>Gemini AI Analysis <span class="badge outline">P2</span></h2>
-          <span class="badge success">API Quota: 85%</span>
-        </div>
-        <div class="ai-body">
-          <div class="ai-trigger">
-            <button class="btn ai-btn glow"><span class="sparkle">✨</span> Analyze Active Chart</button>
-            <p class="ai-hint">Will extract Multi-Timeframe context (P4) and current regime to form scenario.</p>
-          </div>
-          <div class="ai-scenarios">
-            <div class="scenario-card buy">
-              <div class="card-head">
-                <span class="badge buy">LONG SCENARIO</span>
-                <small>Confidence: 82%</small>
-              </div>
-              <p>Awaiting breakout above key resistance at 2035. Target 2050.</p>
-              <div class="levels">
-                <span>Trig: <strong>2035.5</strong></span>
-                <span>Inval: <strong>2028.0</strong></span>
+          <div class="ai-body">
+            <div class="ai-trigger">
+              <button id="run-ai-btn" class="btn ai-btn glow"><span class="sparkle">✨</span> Analisis Chart Aktif</button>
+              <p class="ai-hint">Multi-timeframe context & key scenario calculation.</p>
+            </div>
+            <div id="ai-result-box" class="ai-scenarios" style="display:none;">
+              <div class="scenario-card buy">
+                <div class="card-head">
+                  <span id="ai-bias-badge" class="badge buy">LONG SCENARIO</span>
+                  <small id="ai-confidence-val">Confidence: 80%</small>
+                </div>
+                <div id="ai-levels-list" class="levels" style="margin-bottom:12px;"></div>
+                <ul id="ai-reasons-list" style="padding-left:16px; font-size:11px; color:#ccc;"></ul>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </main>
 
-    <!-- RIGHT PANEL: Trading Desk & News -->
-    <aside class="panel-right">
-      <!-- P3 Trading Desk -->
-      <div class="glass-panel trading-desk">
-        <div class="panel-header">
-          <h2>Trading Desk <span class="badge outline">P3</span></h2>
-        </div>
-        
-        <div class="desk-group">
-          <label>Simulated Capital Allocation</label>
-          <div class="input-wrap">
-            <span class="prefix">$</span>
-            <input type="text" value="10,000.00" class="sleek-input">
+        <!-- Risk Summary Widget -->
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2>Ringkasan Akun</h2>
+          </div>
+          <div class="desk-group">
+            <small style="color:var(--text-muted)">Latest Regime</small>
+            <h3 id="latest-regime" style="font-family:var(--font-mono); font-size:16px;">Loading...</h3>
+          </div>
+          <div class="desk-group" style="margin-top:12px;">
+            <small style="color:var(--text-muted)">AI Confluence Score</small>
+            <h3 id="avg-confluence" style="font-family:var(--font-mono); font-size:16px; color:var(--gold);">-</h3>
           </div>
         </div>
-        
-        <div class="desk-group">
-          <label>Risk Profile</label>
-          <select class="sleek-select full-width">
-            <option>Low (0.5% per trade)</option>
-            <option selected>Medium (1.0% per trade)</option>
-            <option>High (2.0% per trade)</option>
-          </select>
-        </div>
-        
-        <div class="manual-ticket">
-          <h4>Manual Order Ticket</h4>
-          <div class="ticket-grid">
-            <input type="number" placeholder="Entry" class="sleek-input">
-            <input type="number" placeholder="Stop Loss" class="sleek-input">
-            <input type="number" placeholder="Take Profit" class="sleek-input">
+      </aside>
+    </div>
+  </div>
+
+  <!-- TAB 2: ACTIVITAS & SCANNER -->
+  <div id="tab-activity" class="tab-content">
+    <div class="layout-container" style="grid-template-columns: 300px 1fr;">
+      <aside class="panel-left">
+        <!-- P7 Market Scanner -->
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2>Market Scanner <span class="badge outline">P7</span></h2>
           </div>
-          <div class="lot-calc-result">
-            <small>Est. Lot Size based on SL</small>
-            <strong>0.15 Lots</strong>
+          <div class="segmented-control">
+            <button class="seg-btn">Forex</button>
+            <button class="seg-btn active">Metals</button>
+            <button class="seg-btn">Crypto</button>
+          </div>
+          <ul class="scanner-list">
+            <li class="scanner-item active">
+              <div class="asset-info">
+                <strong>XAUUSDm</strong>
+                <small>Gold vs USD</small>
+              </div>
+              <span class="badge gold glow">Top Setup</span>
+            </li>
+            <li class="scanner-item">
+              <div class="asset-info">
+                <strong>XAGUSDm</strong>
+                <small>Silver vs USD</small>
+              </div>
+              <span class="badge muted">Ranging</span>
+            </li>
+          </ul>
+        </div>
+      </aside>
+
+      <main class="panel-center">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2>Sinyal & Confluence Feed</h2>
+            <span id="signal-feed-count" class="badge outline">0 items</span>
+          </div>
+          <div id="signal-feed" style="margin-bottom:16px;"></div>
+          <div id="confluence-feed"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- TAB 3: ANGGARAN RISIKO & ORDER TICKET -->
+  <div id="tab-risk" class="tab-content">
+    <div class="layout-container" style="grid-template-columns: 1fr 340px;">
+      <main class="panel-center">
+        <!-- P5/P6 Automation Controls -->
+        <div class="glass-panel automation-panel">
+          <div class="panel-header">
+            <h2>AI Automation & Risk Profile <span class="badge outline">P5/P6</span></h2>
+          </div>
+          <div class="mode-toggle">
+            <button class="mode-btn active">PAPER</button>
+            <button class="mode-btn">DEMO</button>
           </div>
           <div class="action-grid">
-            <button class="btn buy-btn">BUY</button>
-            <button class="btn sell-btn">SELL</button>
+            <button class="btn primary glow pulse-on-hover">Start AI Trading</button>
+            <button class="btn warning">Pause Entries</button>
+            <button class="btn danger full-width">Force Close AI Positions</button>
+          </div>
+          <div class="evaluation-metrics">
+            <div class="eval-stat">
+              <small>Backtest Win Rate</small>
+              <strong>--%</strong>
+            </div>
+            <div class="eval-stat">
+              <small>Fwd Eval</small>
+              <span class="badge muted">Pending</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- P4 Economic Context -->
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2>Riwayat Event Risiko</h2>
+            <span id="risk-feed-count" class="badge outline">0 events</span>
+          </div>
+          <div id="risk-feed"></div>
+        </div>
+      </main>
+
+      <aside class="panel-right">
+        <!-- P3 Trading Desk -->
+        <div class="glass-panel trading-desk">
+          <div class="panel-header">
+            <h2>Trading Desk <span class="badge outline">P3</span></h2>
+          </div>
+          
+          <div class="desk-group">
+            <label>Simulated Capital Allocation</label>
+            <div class="input-wrap">
+              <span class="prefix">$</span>
+              <input type="text" value="10,000.00" class="sleek-input">
+            </div>
+          </div>
+          
+          <div class="desk-group">
+            <label>Risk Profile</label>
+            <select class="sleek-select full-width">
+              <option>Low (0.5% per trade)</option>
+              <option selected>Medium (1.0% per trade)</option>
+              <option>High (2.0% per trade)</option>
+            </select>
+          </div>
+          
+          <div class="manual-ticket">
+            <h4>Manual Order Ticket</h4>
+            <div class="ticket-grid">
+              <input type="number" placeholder="Entry" class="sleek-input">
+              <input type="number" placeholder="Stop Loss" class="sleek-input">
+              <input type="number" placeholder="Take Profit" class="sleek-input">
+            </div>
+            <div class="lot-calc-result">
+              <small>Est. Lot Size based on SL</small>
+              <strong>0.15 Lots</strong>
+            </div>
+            <div class="action-grid">
+              <button class="btn buy-btn">BUY</button>
+              <button class="btn sell-btn">SELL</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- TAB 4: KONTEKS PASAR -->
+  <div id="tab-fundamental" class="tab-content">
+    <div class="layout-container" style="grid-template-columns: 1fr;">
       <div class="glass-panel economic-context">
         <div class="panel-header">
           <h2>Economic Context <span class="badge outline">P4</span></h2>
@@ -231,8 +276,46 @@
           </div>
         </div>
       </div>
-    </aside>
+    </div>
+  </div>
 
+  <!-- TAB 5: LOG SISTEM (On-Demand Diagnostics) -->
+  <div id="tab-logs" class="tab-content">
+    <div class="layout-container" style="grid-template-columns: 1fr;">
+      <div class="glass-panel">
+        <div class="log-toolbar">
+          <div class="log-filters">
+            <h2>Log Sistem & Diagnosis</h2>
+            <select id="log-level-filter" class="sleek-select" style="padding:4px 8px;">
+              <option value="ALL" selected>Semua Level</option>
+              <option value="INFO">INFO</option>
+              <option value="WARN">WARN</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+            <input type="text" id="log-search-input" placeholder="Cari log..." class="sleek-input" style="padding:4px 8px; width:180px;">
+          </div>
+          <div>
+            <button id="toggle-log-polling" class="btn" style="padding:6px 12px; font-size:11px;">Jeda Polling</button>
+            <button id="export-logs-btn" class="btn primary" style="padding:6px 12px; font-size:11px;">Export JSON</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th style="width:140px;">Waktu</th>
+                <th style="width:80px;">Level</th>
+                <th style="width:100px;">Sumber</th>
+                <th>Pesan</th>
+              </tr>
+            </thead>
+            <tbody id="log-events-tbody">
+              <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Memuat log sistem...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
   
   <p id="updated" style="display:none;"></p>

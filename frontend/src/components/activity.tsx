@@ -55,7 +55,8 @@ export function ActivityPanel({
           </p>
         )}
         <TabsContent value="signals">
-          {data?.open_signal_feed.length ? (
+          {data?.open_signal_feed?.length ? (
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[540px] text-left text-xs">
                 <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -140,7 +141,7 @@ export function ActivityPanel({
           )}
         </TabsContent>
         <TabsContent value="risk">
-          {data?.risk_feed.length ? (
+          {data?.risk_feed?.length ? (
             <div className="divide-y divide-border">
               {data.risk_feed.map((event) => (
                 <div
@@ -175,7 +176,8 @@ export function ActivityPanel({
           )}
         </TabsContent>
         <TabsContent value="regimes">
-          {data?.latest_regimes.length ? (
+          {data?.latest_regimes?.length ? (
+
             <div className="divide-y divide-border">
               {data.latest_regimes.map((regime, index) => (
                 <div

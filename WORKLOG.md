@@ -4,17 +4,77 @@ Catatan kelanjutan sesi. Aturan kerja berada di [AGENTS.md](AGENTS.md), fakta te
 
 ## Current Handoff
 
-- **Permintaan aktif**: Penyederhanaan UI dashboard (clean, modern, simple & pemisahan log ke tab terpisah) telah diselesaikan dan diverifikasi.
-- **Status**: Frontend React/Vite kini menggunakan navigasi berbasis view tab (`workspace`, `activity`, `risk`, `fundamental`, `logs`). LogPanel hanya dimuat on-demand saat tab Log sistem diaktifkan.
-- **Lokasi**: root project AI Trading.
-- **Hasil Verifikasi**: Build TypeScript/Vite sukses (`npm run build`). Seluruh 18 e2e browser test Playwright lulus (18/18 passed).
-- **Langkah berikutnya**: Pasang EA v1.3 pada terminal MT5 untuk menguji sinkronisasi candle live & snapshot akun. Mulai pekerjaan AI (P2).
+- **Permintaan aktif**: Refactoring & Modularisasi Total `App.tsx` (Clean Code Architecture) dan pembersihan elemen redundan.
+- **Status**: Kode frontend telah disederhanakan total menjadi arsitektur modular yang sangat rapi dan reusable (`SidebarNav`, `WorkspaceHeader`, `AiAnalystCard`, `FundamentalPanel`, `HelpDialog`, `SymbolDialog`, `AccountPanel`, `RiskCalculator`). Seluruh 18/18 e2e browser test Playwright telah diverifikasi LULUS 100%.
+- **Lokasi**: `frontend/src/` (`App.tsx`, `components/*`, `lib/api.ts`, `tests/workspace.spec.ts`).
+- **Hasil Verifikasi**: Build TypeScript/Vite sukses (`npm run build`). Seluruh 18 e2e browser test Playwright lulus (18/18 passed). Container `ai-trading-api` telah disinkronkan dan direstart.
+- **Langkah berikutnya**: Melanjutkan ke Prioritas 3 (Pengaturan Alokasi Modal, Profil Risiko, dan Tiket Order Manual).
 
 ## Aturan pencatatan
 
 Perbarui Current Handoff dan tambahkan entri setelah pekerjaan bermakna. Catat permintaan, perubahan, bukti pemeriksaan, masalah terbuka, dan langkah berikutnya. Jangan memasukkan secrets, dump akun, log mentah besar, atau percakapan penuh. Jangan mengubah status rencana menjadi selesai hanya karena file implementasi sudah ada.
 
 ## Task Entries
+
+### 2026-10-03 — Modularisasi Total Frontend & Perbaikan Test Suite Playwright (18/18 Pass)
+
+- **Permintaan**: Merapikan seluruh kode frontend agar clean code, readable, reusable, fat code reduction, dan lulus seluruh pengujian otomatis.
+- **Implementasi**:
+  - `frontend/src/App.tsx`: Refactoring dari berkas monolith (>900 baris) menjadi komponen yang ramping (~360 baris) dan sangat terstruktur.
+  - Komponen Modular Baru/Diperbarui:
+    - `frontend/src/components/sidebar-nav.tsx`: Drawer & navigasi utama.
+    - `frontend/src/components/workspace-header.tsx`: App bar atas dengan status koneksi EA.
+    - `frontend/src/components/ai-analyst-card.tsx`: Komponen khusus kartu analisis pasar AI.
+    - `frontend/src/components/fundamental-panel.tsx`: Panel konteks berita makro & regime pasar.
+    - `frontend/src/components/symbol-dialog.tsx`: Dialog pencarian & pemilihan instrumen MT5.
+    - `frontend/src/components/help-dialog.tsx`: Panduan workspace & status sistem.
+    - `frontend/src/components/account-panel.tsx`: Grid 5-kolom finansial tanpa elemen kartu redundan.
+    - `frontend/src/components/risk-calculator.tsx`: Kalkulator anggaran risiko dengan placeholder automation P5/P6.
+    - `frontend/src/components/market-chart.tsx`: Integrasi chartlive dengan banner notice overlay sinyal.
+- **Verifikasi**:
+  - `npm run build`: Kompilasi TypeScript (`tsc --noEmit`) & Vite build lulus 100% tanpa error.
+  - `npx playwright test`: 18/18 test browser e2e Playwright lulus 100% (desktop & mobile viewports).
+  - Sinkronisasi build dist ke container Docker `ai-trading-api` & container restart telah sukses dilakukan.
+
+
+### 2026-10-03 — Pembersihan Elemen Redundan & 4 Stat Card Dashboard
+
+- **Permintaan**: Menghapus 4 stat card ringkasan (Sinyal tercatat, Sinyal terbuka, Event risiko aktif, Confluence rata-rata) dari dashboard utama agar tidak terlalu ramai, serta menghapus footer redundan "Mata uang akun: USD" dari setiap item angka akun.
+- **Implementasi**:
+  - `frontend/src/App.tsx`: Menghapus grid 4 stat card ringkasan dari tab **workspace**.
+  - `frontend/src/components/account-panel.tsx`: Mengatur layout angka akun (Saldo, Equity, Profit, Margin terpakai, Margin bebas) ke dalam grid ringkas 5 kolom tanpa teks footer mata uang yang berulang di setiap item (mata uang disatukan pada header akun).
+- **Verifikasi**:
+  - `npm run build`: Berhasil tanpa error.
+  - `npx playwright test`: 18/18 test browser e2e lulus.
+  - Container Docker `ai-trading-api` telah disinkronkan dan direstart.
+
+
+### 2026-10-03 — Eksekusi Pemisahan Log Sistem & Layout Dashboard Clean Modern
+
+- **Permintaan**: "memisahkan logs dan lain lain dari dashboard belum kamu eksekusi, eksekusi sekarang".
+- **Implementasi**:
+  - `app/static/dashboard.html`: Mengimplementasikan navigasi tab interaktif (`Workspace`, `Aktivitas & Scanner`, `Anggaran Risiko`, `Konteks Pasar`, `Log Sistem`) pada tampilan static dashboard.
+  - `app/static/js/dashboard.js`: Memisahkan listener dan polling diagnostik log agar hanya dipanggil secara on-demand saat tab **Log Sistem** aktif. Menambahkan trigger analisis AI interaktif pada chart aktif.
+  - `app/static/css/dashboard.css`: Menambahkan styling tab nav glassmorphism, badge status, dan tabel log sistem.
+  - `frontend/src/App.tsx`: Memastikan workspace utama tetap clean & modern dan LogPanel hanya di-render secara lazily pada tab `logs`.
+- **Verifikasi**:
+  - `npm run build`: Berhasil tanpa error.
+  - `npx playwright test`: 18/18 test browser e2e lulus.
+
+
+### 2026-10-03 — Implementation Prioritas 2: Analisis Market AI & Anotasi Chart Live
+
+- **Permintaan**: "gas lanjutkan" (Melanjutkan eksekusi Prioritas 2 sesuai Implementation Plan yang telah disetujui).
+- **Implementasi**:
+  - `app/engines/ai_analyst.py`: Engine analisis teknikal multi-indicator (Swing High/Low, Pivot, EMA-14, SMA-20, ATR) dengan integrasi Gemini API REST & fallback sintetis deterministik.
+  - `app/api/endpoints.py`: Menambahkan endpoint `GET /api/ai/analyze?symbol=...&interval=...`.
+  - `frontend/src/lib/api.ts`: Menambahkan interface `AiAnalysisResult`, `AiScenario`, `ChartOverlayItem`, dan helper `getAiAnalysis`.
+  - `frontend/src/components/market-chart.tsx`: Menggambar garis horizontal visual (SL, TP, Support, Resistance) secara otomatis di canvas KLineChart dari data overlay AI.
+  - `frontend/src/App.tsx`: Mengaktifkan tombol **"Analisis chart aktif"** pada kartu AI Market Analyst, menampilkan status loading, badge arah bias & confidence %, rincian skenario, serta poin-poin alasan analisis.
+- **Verifikasi**:
+  - `python3 -m unittest tests/test_ai_analyst.py`: 3/3 unittest backend lulus (0.000s).
+  - `npm run build`: Kompilasi TypeScript & Vite berhasil tanpa error.
+  - `npx playwright test`: 18/18 end-to-end browser test pass, termasuk simulasi klik "Analisis chart aktif" dan rendering skenario LONG (82%).
 
 ### 2026-10-03 — Penyederhanaan UI Dashboard & Pemisahan Tab Log Sistem
 

@@ -100,6 +100,16 @@ async function mockApi(
       positions_count: 1, connected: true,
       updated_at: new Date(Date.now() - (options.stale ? 120_000 : 0)).toISOString(),
     } })
+    if (url.pathname === '/api/ai/analyze') return route.fulfill({ json: {
+      symbol: url.searchParams.get('symbol') || 'XAUUSDm',
+      interval: url.searchParams.get('interval') || '1H',
+      bias: 'LONG',
+      confidence: 82,
+      rationale: ['Struktur bullish di atas EMA-14', 'Support kunci di swing low'],
+      scenarios: { main: { direction: 'LONG', entry_min: 2700, entry_max: 2705, stop_loss: 2690, take_profit_1: 2720, take_profit_2: 2740, rr_ratio: 1.5 } },
+      chart_overlays: [{ type: 'stop_loss', label: 'Stop Loss', price: 2690, style: 'solid', color: '#f43f5e' }],
+      provider: 'deterministic_engine',
+    } })
     if (url.pathname === '/api/diagnostics') return route.fulfill({ json: {
       session_id: 'test-session', started_at: new Date().toISOString(), generated_at: new Date().toISOString(),
       capacity: 1000, dropped: 0,
@@ -129,10 +139,13 @@ test('live chart, timeframe, signal overlays and risk calculator work without mu
   await expect(page.getByText('Data diterima', { exact: true })).toBeVisible()
   await expect(
     page.getByRole('button', { name: 'Analisis chart aktif', exact: true }),
-  ).toBeDisabled()
+  ).toBeEnabled()
+  await page.getByRole('button', { name: 'Analisis chart aktif', exact: true }).click()
+  await expect(page.getByText('LONG (82%)')).toBeVisible()
   await expect(
     page.getByRole('button', { name: 'Mulai trading dengan AI' }),
   ).toBeDisabled()
+
   await page.getByRole('button', { name: '15M', exact: true }).click()
   await expect(page.getByTestId('market-chart')).toBeVisible()
   await page.getByRole('button', { name: 'RSI', exact: true }).click()

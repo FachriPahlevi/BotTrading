@@ -71,19 +71,95 @@ body {
 .ticker-label { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
 .ticker-value { font-style: normal; font-weight: 600; font-family: var(--font-mono); }
 
-.nav-metrics {
+.nav-tabs {
   display: flex;
-  gap: 16px;
+  gap: 4px;
+  margin-left: 12px;
+  background: rgba(0,0,0,0.3);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
 }
-.metric-chip {
-  display: flex;
-  flex-direction: column;
+
+.nav-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
 }
-.metric-chip small { color: var(--text-muted); font-size: 10px; text-transform: uppercase; }
-.metric-chip span { font-weight: 600; font-size: 12px; color: var(--gold); }
+
+.nav-tab:hover {
+  color: var(--text-main);
+  background: rgba(255,255,255,0.05);
+}
+
+.nav-tab.active {
+  background: rgba(240,185,11,0.15);
+  color: var(--gold);
+  border: 1px solid rgba(240,185,11,0.3);
+  font-weight: 600;
+}
 
 .nav-status { margin-left: auto; }
 .nav-status i { color: var(--text-muted); font-style: normal; font-size: 12px; }
+
+/* TAB CONTENT */
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+}
+
+/* LOG PANEL STYLING */
+.log-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.log-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.log-table th {
+  text-align: left;
+  padding: 10px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(0,0,0,0.2);
+}
+
+.log-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.log-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+.log-level-INFO { color: #0ecb81; }
+.log-level-WARN { color: #f0b90b; }
+.log-level-ERROR { color: #f6465d; }
+
 
 /* LAYOUT */
 .layout-container {

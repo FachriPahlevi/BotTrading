@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Calculator, Info, ShieldCheck } from 'lucide-react'
+import { Calculator, Info, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { accountMoney, type TerminalAccount } from '@/lib/api'
 
 export function RiskCalculator({ account }: { account?: TerminalAccount }) {
@@ -17,6 +18,7 @@ export function RiskCalculator({ account }: { account?: TerminalAccount }) {
     amount > 0 &&
     percent > 0 &&
     percent <= 100
+
   return (
     <Card id="risk" className="scroll-mt-6">
       <CardHeader>
@@ -72,7 +74,9 @@ export function RiskCalculator({ account }: { account?: TerminalAccount }) {
         </div>
         {!valid && (
           <p role="alert" className="text-xs text-destructive">
-            {!account ? 'Menunggu saldo MT5 yang valid dan terbaru.' : 'Saldo harus positif dan risiko lebih dari 0 sampai 100%.'}
+            {!account
+              ? 'Menunggu saldo MT5 yang valid dan terbaru.'
+              : 'Saldo harus positif dan risiko lebih dari 0 sampai 100%.'}
           </p>
         )}
         <p className="flex gap-2 text-[11px] leading-relaxed text-muted-foreground">
@@ -80,6 +84,9 @@ export function RiskCalculator({ account }: { account?: TerminalAccount }) {
           Dihitung dari saldo MT5 terbaru. Persentase ini hanya kalkulator lokal,
           belum mengatur risiko engine atau lot. Tidak mengirim order.
         </p>
+        <Button disabled className="w-full">
+          <LockKeyhole className="size-3.5" /> Mulai trading dengan AI
+        </Button>
       </CardContent>
     </Card>
   )
