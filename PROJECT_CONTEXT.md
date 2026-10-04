@@ -24,6 +24,7 @@ Tanggal peninjauan awal: 2026-10-03. Dokumen ini mencatat kode yang diperiksa; s
 | Core trading | `src/trading_agent/` | Strategi EMA/ATR, risiko, execution state machine, rekonsiliasi, SQLite |
 | Adapter | `src/trading_agent/adapters/` | Mock dan MT5; adapter MT5 juga memiliki fungsi submit order |
 | Simulasi | `src/trading_agent/backtest.py`, `src/trading_agent/brokers/paper.py` | Backtest dan PaperBroker |
+| Strategy Lab | `app/lab/`, `app/api/lab.py`, `frontend/src/components/lab/` | Registry indikator, strategi terversi, dataset historis immutable, pratinjau chart, dan run backtest research |
 | UI/CLI core | `src/trading_agent/ui/app.py`, `src/trading_agent/cli.py` | Streamlit dan CLI terpisah dari dashboard web |
 | Test | `tests/` | unittest untuk strategi/risk, eksekusi/rekonsiliasi, backtest export, indikator kompatibilitas |
 
@@ -34,6 +35,8 @@ Diagnostik: `app/diagnostics.py` mencatat request `/api/*` dan health (kecuali p
 Pembaruan akun: `app/api/account.py` menyediakan `GET /api/account` dan ingest `POST /api/mt5/account`. Bridge EA v1.3 mengirim metadata/account snapshot terpisah dari candle dan meminta M1/M5/M15/H1/H4/D1; bridge Python menyediakan `/account`. Pemilihan sumber mengikuti `MT5_BRIDGE_URL`. Frontend membaca snapshot 15 detik, menampilkan nama/broker/server/jenis akun, balance/equity/profit/margin, mata uang, leverage, kredit, dan jumlah posisi. Kalkulator memakai balance tersebut, bukan input simulasi. Snapshot usang (>60 detik), disconnected, atau gagal baca ditolak; UI tidak memakai saldo lama. Ini satu akun aktif per instance API, belum multi-user. Setup terminal ada di `MT5_ACCOUNT_SETUP.md`; penerimaan akun live tetap membutuhkan pembaruan bridge di mesin MT5.
 
 Pembaruan frontend 2026-10-03: FastAPI menyajikan `frontend/dist` pada `/` dan `/workspace/` ketika build tersedia saat startup. Dockerfile memakai build Node terpisah. Frontend hanya membaca API chart/summary/health/account; tidak melakukan mutasi, ARM, atau submit. News, AI, worker, dan eksekusi yang belum didukung endpoint tampil unavailable. Kalkulator risiko memakai balance akun MT5 dengan persentase lokal, bukan konfigurasi engine. Detail setup ada di `frontend/README.md`.
+
+Strategy Lab 2026-10-04: menu sidebar **Indikator & strategi** menyediakan CRUD terversi (hapus berupa arsip), clone, impor/ekspor JSON, diff versi, impor source Pine untuk review, pratinjau indikator, manajemen dataset, dan backtest research. Metadata/versi/run disimpan di PostgreSQL; candle dataset disimpan sebagai snapshot NPZ terkompresi dan ber-checksum pada volume `lab_data`. Pine tidak dieksekusi. Adaptasi numerik BOSWaves berstatus `draft`, belum merupakan reproduksi TradingView yang terverifikasi. Jalur ini tidak mengirim order terminal dan belum menjadi sinyal live/PAPER/DEMO.
 
 Catatan bukti: WORKLOG/roadmap telah memuat klaim pekerjaan P0/P1 dari sesi lain sebelum migrasi frontend ini. Status tersebut tidak divalidasi ulang dalam tugas UI; temuan review awal di bawah merupakan baseline historis. Kode API saat ini sudah memiliki TTL cache 60 detik dan perbaikan RSI, tetapi masih memiliki endpoint placeholder. Jangan menganggap pengujian frontend membuktikan P0/P1 tuntas.
 
@@ -47,7 +50,7 @@ Catatan bukti: WORKLOG/roadmap telah memuat klaim pekerjaan P0/P1 dari sesi lain
 
 - `requirements.txt` memuat FastAPI, Uvicorn, Pydantic, SQLAlchemy, psycopg2, pandas, numpy, dan PyYAML dengan versi terkunci. Daftar ini belum mencakup semua kebutuhan UI Streamlit/core.
 - Dockerfile memakai Python 3.11; Compose menjalankan API dan PostgreSQL 15.
-- Container memakai `PYTHONPATH=/app`; package core berada di `src/`, sehingga perintah core memerlukan path package yang sesuai.
+- Container memakai `PYTHONPATH=/app:/app/src`, sehingga domain indikator/backtest di `src/trading_agent` dapat dipanggil API Strategy Lab.
 - `config.yaml` memiliki struktur nested untuk engine web/TDS. `AppConfig` core menerima field flat. Jangan menganggap YAML tersebut mengatur worker dengan nilai yang sama; field ekstra dapat diabaikan oleh model saat ini.
 - Default core mencakup PAPER/mock, risk per trade 0.5%, daily loss 2%, drawdown 5%. YAML web mencantumkan nilai berbeda. Ini catatan implementasi, bukan persetujuan untuk mengganti parameter risiko.
 - Worker mengimpor `fcntl`, sehingga kompatibilitas Windows belum terpenuhi walaupun adapter MT5 ditujukan untuk Windows.

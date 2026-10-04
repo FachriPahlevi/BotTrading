@@ -14,7 +14,12 @@ export async function fetchMarketData(
   interval: string,
   signal?: AbortSignal,
 ): Promise<Market> {
-  const query = new URLSearchParams({ symbol, interval, limit: '300' }).toString()
+  const normalizedInterval = interval.trim().toLowerCase()
+  const query = new URLSearchParams({
+    symbol,
+    interval: normalizedInterval,
+    limit: '300',
+  }).toString()
   const data = await apiGet<Market>(`/api/market/chart?${query}`, signal)
 
   if (
@@ -51,11 +56,12 @@ export async function fetchMarketData(
 }
 
 export function useMarketData(symbol: string, interval: string) {
-  const pollingInterval = getScalpingPollingInterval(interval)
+  const normalizedInterval = interval.trim().toLowerCase()
+  const pollingInterval = getScalpingPollingInterval(normalizedInterval)
 
   return useQuery<Market, Error>({
-    queryKey: ['market', symbol, interval],
-    queryFn: ({ signal }) => fetchMarketData(symbol, interval, signal),
+    queryKey: ['market', symbol, normalizedInterval],
+    queryFn: ({ signal }) => fetchMarketData(symbol, normalizedInterval, signal),
     refetchInterval: pollingInterval,
     refetchIntervalInBackground: true,
     staleTime: 1000,

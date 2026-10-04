@@ -13,13 +13,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    ca-certificates \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+    PYTHONPATH=/app:/app/src
 
 COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt

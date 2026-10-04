@@ -31,7 +31,8 @@ services:
       - "8000:8000"
     environment:
       PYTHONUNBUFFERED: "1"
-      PYTHONPATH: "/app"
+      PYTHONPATH: "/app:/app/src"
+      LAB_DATA_DIR: /app/lab-data
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       POSTGRES_DB: ai_trading
@@ -40,7 +41,10 @@ services:
       MT5_BRIDGE_URL: ${MT5_BRIDGE_URL:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - lab_data:/app/lab-data
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  lab_data:

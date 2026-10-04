@@ -10,6 +10,34 @@ from fastapi import FastAPI, HTTPException
 app = FastAPI(title="HFM MT5 Bridge")
 
 
+@app.get('/history')
+def history(symbol: str, start: str, end: str):
+    """Bounded read-only M1 history for Strategy Lab; UTC, exact symbol, closed bars."""
+    try:
+        beginning = datetime.fromisoformat(start.replace('Z', '+00:00'))
+        ending = datetime.fromisoformat(end.replace('Z', '+00:00'))
+        if beginning.tzinfo is None or ending.tzinfo is None or not 0 < (ending-beginning).total_seconds() <= 7*86400:
+            raise ValueError()
+    except ValueError:
+        raise HTTPException(422, 'UTC start/end required, maximum 7 days per request')
+    if not symbol or len(symbol) > 30 or not all(c.isalnum() or c in '._-' for c in symbol):
+        raise HTTPException(422, 'Invalid symbol')
+    terminal, before = mt5.terminal_info(), mt5.account_info()
+    if terminal is None or not terminal.connected or before is None:
+        raise HTTPException(503, 'MT5 is disconnected')
+    if not mt5.symbol_select(symbol, True):
+        raise HTTPException(404, 'Exact symbol unavailable')
+    rates = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_M1, beginning.astimezone(timezone.utc), ending.astimezone(timezone.utc))
+    after = mt5.account_info()
+    if rates is None or after is None or (before.login, before.server) != (after.login, after.server):
+        raise HTTPException(503, 'History unavailable or terminal account changed')
+    cutoff = datetime.now(timezone.utc).timestamp()
+    candles = [dict(time=int(r['time'])*1000, open=float(r['open']), high=float(r['high']),
+                    low=float(r['low']), close=float(r['close']), volume=float(r['tick_volume']))
+               for r in rates if beginning.timestamp() <= int(r['time']) < ending.timestamp() and int(r['time'])+60 <= cutoff]
+    return dict(broker=before.company, server=before.server, symbol=symbol, interval='1m', candles=candles)
+
+
 @app.get("/account")
 def account():
     terminal = mt5.terminal_info()
@@ -64,6 +92,7 @@ def disconnect_mt5():
 @app.get("/chart")
 def chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 160):
     symbol = symbol.strip()
+    interval = interval.strip().lower()
     if interval not in TIMEFRAMES:
         raise HTTPException(status_code=400, detail="Unsupported interval")
 

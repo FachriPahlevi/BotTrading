@@ -13,6 +13,9 @@ from sqlalchemy.exc import OperationalError
 from app.api.endpoints import router as api_router
 from app.api.account import router as account_router
 from app.api.diagnostics import router as diagnostics_router
+from app.api.lab import router as lab_router
+from app.lab import jobs as lab_jobs
+from app.db.session import SessionLocal
 from app.diagnostics import DiagnosticMiddleware, record
 from app.core.config import settings
 from app.db.session import Base, engine
@@ -32,6 +35,8 @@ async def lifespan(app: FastAPI):
                 raise
             time.sleep(1)
     record('INFO', 'system', 'API siap menerima request')
+    with SessionLocal() as db:
+        lab_jobs.recover(db)
     yield
 
 
@@ -92,3 +97,4 @@ def health():
 app.include_router(api_router, prefix="/api")
 app.include_router(account_router, prefix="/api")
 app.include_router(diagnostics_router, prefix="/api")
+app.include_router(lab_router, prefix="/api")

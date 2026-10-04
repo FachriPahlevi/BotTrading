@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.db-wal
+*.db-shm
+lab-data/
+.env
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/

@@ -45,6 +45,12 @@ class MarketIngestTests(unittest.TestCase):
         self.assertEqual(result["interval"], "1h")
         self.assertEqual(len(result["candles"]), 60)
 
+    def test_chart_interval_is_case_insensitive(self):
+        endpoints.receive_mt5_candles({"symbol": "XAUUSDm", "interval": "1h", "candles": candles()})
+        result = endpoints.get_market_chart("XAUUSDm", "1H", 300)
+        self.assertEqual(result["interval"], "1h")
+        self.assertEqual(len(result["candles"]), 60)
+
 
 if __name__ == '__main__':
     unittest.main()

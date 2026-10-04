@@ -444,6 +444,158 @@ Kriteria selesai:
 - Sebelum implementasi terkait, tetapkan stack akhir, metode bridge, daftar timeframe, strategi pertama, parameter preset risiko, dan sumber data eksternal bila dibutuhkan.
 - Perbaikan P0 tetap dapat dikerjakan tanpa menunggu keputusan provider AI atau migrasi Go.
 
+## AI Strategy Lab Engineering Guide
+
+Panduan kerja untuk alur **strategi bernama, indikator plug-in, backtest massal, dan AI gate**. Melengkapi `AGENTS.md`; bila bertentangan, `AGENTS.md` dan instruksi pengguna saat ini menang. Detail desain ada di `STRATEGY_LAB_SPEC.md` (bila tersedia); berkas ini hanya memuat aturan yang berlaku lintas sesi.
+
+### Baca sebelum bekerja
+
+1. Baca `AGENTS.md`, `PROJECT_CONTEXT.md`, Current Handoff di `WORKLOG.md`, dan tahap relevan di `IMPROVEMENT_PLAN.md`.
+2. Kerjakan **satu fase roadmap per langkah**. Roadmap adalah rencana, bukan izin menjalankan seluruh backlog sekaligus.
+3. Cari implementasi yang sudah ada (indikator, sinyal, risiko, konfigurasi) sebelum menulis yang baru.
+4. Bedakan empat hal dan jangan dicampur: **fakta terverifikasi di kode**, **laporan pengguna**, **target desain**, dan **asumsi**.
+
+### Tujuan produk (ringkas)
+
+Pengguna ingin menyimpan method dengan nama dan parameter, menjalankan ratusan backtest bernama (tiap run dengan jumlah transaksi yang ditentukan, mis. 100), membandingkan hasilnya, memakai indikator ala TradingView lewat form konfigurasi, dan mengeksekusi buy/sell dari aplikasi sendiri dengan sinyal yang sama dengan yang di-backtest. Indikator dan strategi dikelola dari UI (tambah, lihat, ubah, hapus, duplikat, lalu apply) tanpa menyentuh kode, termasuk indikator hasil impor dari script TradingView yang source-nya terbuka. AI dipakai sebagai analis, penggambar overlay, dan filter kualitas. Target pengguna: lebih sedikit trade minus. **Tidak ada jaminan profit**, dan tidak boleh ada klaim atau salinan UI yang menyiratkannya.
+
+### Status baseline dan pembaruan (2026-10-04)
+
+Fakta di repo:
+- Candle disimpan di `market_cache` (RAM) dan hilang saat restart; EA mengirim 160 candle tiap 15 detik. Belum ada penyimpanan histori permanen.
+- `app/` (FastAPI + Postgres) dan `src/trading_agent/` (worker, SQLite, `ExecutionStateMachine`, adapter MT5 dengan magic **998877**) belum menyatu.
+- Chart frontend sudah mendukung `chart_overlays`; analisis AI saat ini hanya garis horizontal dari metrik ringkas.
+- Belum ada registry indikator, penyimpanan strategi, maupun mesin backtest.
+
+Pembaruan implementasi setelah baseline di atas: registry indikator, strategi terversi, dataset snapshot NPZ ber-checksum, API/UI manajemen, pratinjau chart, serta backtest research deterministik telah ditambahkan. Pengujian domain Strategy Lab 14/14 dan UI desktop/mobile 2/2 lulus. Histori tiga bulan dari terminal aktual belum diimpor, kecocokan BOSWaves dengan TradingView belum diverifikasi, dan apply ke sinyal live/PAPER/DEMO belum diimplementasikan. Karena itu baseline di atas tetap berguna sebagai catatan awal, bukan status runtime terbaru.
+
+Draf yang **belum dikompilasi/diuji** dan bukan bukti fitur berjalan: `AurumBridge.mq5` (v1.4), `AurumBridgeV2.mq5`, `ai_features.py`, `ai_gate.py`, `ai_agent.py`. Perlakukan sebagai referensi. Draf ini harus lulus pengujian sebelum digabung, dan `AurumBridgeV2.mq5` wajib direvisi lebih dulu (magic 998877, blokir REAL/CONTEST, pertahankan log `instance_id`, jadi eksekutor yang dipicu state machine).
+
+### Aturan domain
+
+#### Data
+- Waktu internal selalu **UTC**; konversi offset broker (termasuk DST) dilakukan sengaja dan terdokumentasi.
+- Penulisan data harus **idempoten** (upsert berdasarkan `simbol + interval + waktu`); sinkron berulang tidak boleh menghasilkan duplikat. Deteksi gap dan isi hanya yang bolong.
+- Validasi saat penerimaan: urut waktu, tanpa duplikat, OHLC konsisten, angka finite, simbol/timeframe valid. Data kosong, basi, dan error harus dapat dibedakan dari nilai nol yang sah.
+- Tiap dataset punya `dataset_id` (hash broker, server, simbol, interval, rentang, jumlah baris, checksum) yang tersimpan di setiap hasil backtest.
+- Pisahkan candle tertutup dan candle berjalan. Hanya candle tertutup untuk indikator, sinyal, dan backtest.
+- Histori besar tidak dikirim lewat EA/WebRequest; ambil lewat Python `MetaTrader5` (Windows). Uji perubahan bridge terpisah dan catat metode koneksi yang diuji.
+
+#### Indikator
+- **Satu implementasi** per indikator, dipakai backtest, live, dan fitur AI. Jangan menyalin rumus ke modul lain.
+- Kontrak indikator berupa skema (input bertipe, default, batas, output, `warmup_bars`). Form UI dibuat dari skema; indikator baru tidak boleh memerlukan kode frontend khusus.
+- Warm-up dihitung dari skema: EMA 200 praktis butuh **>= 600 bar** (160 bar masih menyisakan sekitar 20% error awal), jadi 160 candle dari EA tidak cukup. Sebelum warm-up terpenuhi, nilai indikator ditandai **belum valid**, bukan dihitung dengan data kurang.
+- Cocokkan perilaku TradingView: standar deviasi **populasi** untuk Bollinger, smoothing **Wilder** untuk RSI/ATR, warm-up EMA yang cukup. Verifikasi dengan ekspor data TradingView pada candle yang sama.
+- Indikator multi-timeframe hanya memakai bar yang sudah tertutup di timeframe tujuan, digeser satu bar, tanpa look-ahead.
+- Pine Script **tidak dijalankan**. Hanya indikator open-source yang boleh diterjemahkan, hasil terjemahan wajib direview manusia, dan lisensi penulis diperiksa. Closed-source/invite-only tidak didukung.
+
+#### Strategi
+- Strategi adalah **fungsi sinyal murni** (indikator, setup, entry/SL/TP) dan dipakai di tiga tempat: backtest, sinyal live, eksekusi paper/demo. Jangan menulis logika strategi dua kali.
+- Detail yang tidak ditetapkan sumber menjadi **parameter konfigurasi yang tersimpan di setiap run**, ditandai asumsi, dan strategi berstatus `experimental`. Jangan menebak diam-diam dan jangan menyebut prototype sebagai reproduksi persis sumber.
+- Klaim dari sumber eksternal (mis. hasil backtest di video) adalah klaim, bukan fakta. Catat kontradiksi di sumber; jangan memilih salah satu sebagai pasti.
+- Varian target bertingkat/break-even adalah strategi terpisah dari varian TP tetap. Jangan menjumlahkan beberapa target seolah satu posisi bervolume penuh.
+- Status strategi: `idea`, `backtest`, `oos_passed`, `paper`, `demo`, `live`. Naik status hanya dengan bukti; `live` tetap diblokir sampai ada keputusan terpisah dari pemilik.
+
+#### Backtest
+- Hanya candle tertutup, tanpa data masa depan. Entry memakai harga yang dapat dieksekusi (Bid/Ask) dan **model biaya wajib** (spread, komisi, slippage) sebagai parameter eksplisit.
+- Jika SL dan TP tersentuh pada candle yang sama, hitung **SL lebih dulu** kecuali ada data tick; dokumentasikan kebijakannya di hasil.
+- Setup dengan `R <= 0` tidak valid. Cegah sinyal ganda untuk setup yang sama.
+- Run harus dapat direproduksi: simpan `dataset_id`, `config_hash`, `code_version`, dan `seed`. Dua run dengan masukan sama menghasilkan hasil identik.
+- Run berhenti saat jumlah trade target tercapai; bila data habis lebih dulu, tandai `incomplete`.
+- Ukur sebelum mengoptimasi. Urutan yang diizinkan: data di Parquet/DuckDB, indikator vektor NumPy, loop simulasi Numba, paralel `ProcessPoolExecutor`. Jangan menulis ulang dalam bahasa lain tanpa pengukuran.
+- Cache indikator memakai kunci yang memuat parameter dan `dataset_id`; ganti versi dataset harus meng-invalidate cache.
+
+#### Pelaporan hasil
+- Laporkan selalu jumlah trade, win rate, **selang kepercayaan** (Wilson 95%), **win rate impas** setelah biaya, expectancy dalam R, profit factor, dan max drawdown.
+- Jangan melaporkan hanya run terbaik. Tampilkan distribusi dan **jumlah percobaan** (ratusan variasi pada data yang sama menghasilkan "pemenang" kebetulan).
+- Hasil in-sample tidak boleh disajikan sebagai bukti. Tandai data yang dipakai menyetel; simpan **holdout terkunci** yang tidak disentuh sampai strategi dianggap final, dan catat setiap pembukaannya.
+- Kelulusan ke `oos_passed` memerlukan sampel cukup di data yang tidak dipakai menyetel dan expectancy positif setelah biaya. Ambang bersifat konfigurasi, dicatat, dan tidak dilonggarkan diam-diam.
+
+#### AI
+- AI **mengusulkan**; kode deterministik (gate) memutuskan TRADE/WAIT. Output AI divalidasi dengan model bertipe (angka finite, sisi SL/TP, struktur) sebelum dipakai; keluaran yang tidak lolos berarti WAIT.
+- AI tidak boleh memilih atau menyetel parameter pada data yang sama dengan yang dipakai menilai hasilnya.
+- AI tidak melihat data yang belum tertutup sebagai final dan tidak mengarang berita atau data di luar konteks yang diberikan.
+- Kunci API hanya lewat environment/header; tidak pernah di URL, log, fixture, atau dokumentasi. Batasi panggilan (kuota harian), cache per candle tertutup, dan jangan bocorkan isi error provider.
+- Verifikasi nama model aktif sebelum memakainya; nama model di kode adalah default yang dapat usang.
+- Fallback offline tetap melewati gate yang sama. Ambang gate adalah titik awal heuristik, bukan hasil optimasi; kalibrasi dengan hasil forward PAPER dan catat perubahannya.
+- Hasil analisis yang berstatus TRADE harus dicatat dan dievaluasi hasilnya pada candle berikutnya; tanpa itu klaim "lebih akurat" tidak boleh dibuat.
+
+#### Eksekusi
+- Alur tunggal: strategi/AI menghasilkan rencana terstruktur, risk engine memvalidasi, `ExecutionStateMachine` mengirim, EA mengeksekusi, hasil direkonsiliasi. EA adalah **eksekutor bodoh** dan tidak menerima perintah langsung dari output AI.
+- Invarian `AGENTS.md` berlaku penuh: PAPER tidak mengirim order terminal, DEMO memerlukan ARM eksplisit per sesi dan pemeriksaan akun aktual, **REAL/CONTEST tetap diblokir** (di backend dan di EA), order UNKNOWN/SUBMITTING menghalangi order baru, kegagalan membaca posisi bukan hasil kosong yang valid.
+- Perintah ke EA idempoten (id sama tidak dieksekusi dua kali). `EnableTrading` default `false`. Magic number mengikuti adapter repo (998877).
+- Pengaman operasional wajib ada sebelum DEMO otomatis: batas rugi harian, batas lot dan posisi, SL wajib, filter spread maksimal, penjaga data basi, cooldown setelah kalah beruntun, tombol halt. Sizing berbasis risiko dari jarak SL, bukan lot dari AI.
+- Jangan mengubah strategi, ambang risiko, broker, atau mode akun sebagai efek samping tugas lain.
+
+### Manajemen indikator dan strategi (CRUD + apply)
+
+Tujuan: pengguna mengelola indikator dan strategi dari UI dengan mudah, tanpa menyentuh kode.
+
+#### Entitas
+- **Definisi indikator**: `bawaan` (read-only, diimplementasikan di kode) atau `pengguna` (hasil impor/terjemahan, dapat diubah).
+- **Instans indikator**: definisi + parameter + nama (mis. `bb_out` = bbands, length 25, mult 3). Hidup di dalam versi strategi.
+- **Strategi** dan **versi strategi**: konfigurasi lengkap (instans indikator, aturan, filter, model biaya default).
+
+#### Aturan CRUD
+- Semua masukan divalidasi terhadap skema (tipe, batas, enum) sebelum disimpan. Nama unik; tolak yang bentrok.
+- **Versi yang sudah dipakai backtest/paper/demo tidak dapat diubah.** Mengedit membuat versi baru; versi lama tetap utuh agar hasil lama dapat direproduksi.
+- Hapus = **arsip (soft delete)** bila masih dirujuk run atau riwayat; hapus permanen hanya bila tidak dirujuk. Definisi bawaan tidak dapat diubah atau dihapus.
+- Sediakan duplikat/clone, ekspor-impor JSON (validasi yang sama), diff antar versi, dan hitungan pemakaian ("dipakai N run").
+- Catat audit: kapan, apa yang berubah, dan `config_hash`.
+
+#### Apply
+Apply membuat **snapshot konfigurasi** (dengan `config_hash`), bukan rujukan hidup; mengubah definisi sesudahnya tidak mengubah run lama. Target apply:
+- **Chart (pratinjau)**: hanya menggambar indikator/sinyal. Hanya baca; tidak menyentuh jalur eksekusi.
+- **Backtest**: membuat run bernama (atau batch/grid) dari snapshot.
+- **Sinyal live / shadow**: menghitung sinyal pada candle tertutup tanpa order.
+- **PAPER/DEMO**: hanya bila status strategi mengizinkan, lewat risk engine, ARM, dan state machine. `live` tetap diblokir.
+
+Apply ditolak bila data kurang dari warm-up (nilai maksimum `warmup_bars` semua indikator di strategi); tampilkan angka kebutuhannya ke pengguna.
+
+#### Format aturan strategi
+Aturan berupa struktur terdeklarasi atas instans indikator (mis. `crossover(stoch.k, stoch.d)`, `close > ema200`, definisi SL/TP), bukan kode bebas. Ini menjaga validasi, reproduksibilitas, dan pencatatan alasan lolos/gagal tiap syarat.
+
+#### Impor indikator dari TradingView
+Alur: sumber (tempel kode, atau URL halaman script) -> cek ketersediaan source dan lisensi -> terjemahan (dibantu AI) -> validasi statis -> pratinjau di chart -> uji kecocokan terhadap data TradingView -> persetujuan manusia -> simpan sebagai indikator `pengguna`.
+- Hanya script yang **source-nya terbuka**. Closed-source, protected, dan invite-only tidak didukung dan tidak boleh dicoba ditembus. Pengambilan dari URL bersifat best-effort; bila kode tidak terbaca, minta pengguna menempelkannya dan jangan mengarang isinya.
+- Simpan **provenance**: URL, penulis, lisensi, tanggal, hash source Pine, versi penerjemah. Lisensi yang tidak jelas atau melarang turunan ditandai dan ditahan sampai pemilik memutuskan.
+- Dilarang scraping massal, menyimpan kredensial/cookie TradingView, atau mengakses akun pengguna.
+- Konstruksi Pine yang tidak didukung (`strategy.*`, `request.security` dengan `lookahead_on` atau perilaku repainting, objek gambar, impor library, array/matrix kompleks) berstatus `unsupported` beserta alasannya. **Jangan mengaproksimasi diam-diam.**
+- Status indikator pengguna: `draft` (boleh pratinjau chart) lalu `verified` (lolos uji kecocokan). Strategi yang memakai indikator `draft` tidak boleh naik dari `idea`.
+- Hasil terjemahan **tidak dijalankan sebagai kode bebas**: tanpa `eval`/`exec` atas masukan pengguna atau AI. Bentuk yang diizinkan: rakitan primitif terdeklarasi (sma, ema, stdev, highest, lowest, crossover, dst) atau modul Python yang direview lewat alur kode normal. Tanpa akses jaringan atau berkas.
+
+#### UI dan API minimal
+- UI: daftar dengan pencarian dan filter status, form dari skema, pratinjau chart, menu Apply, clone, diff versi.
+- API: `/api/indicators` (CRUD, `/import`, `/validate`, `/{id}/verify`) dan `/api/strategies` (CRUD, `/versions`, `/{version}/apply`).
+
+### Verifikasi dan definition of done
+
+- Pengujian otomatis memakai fixture sintetis, provider AI palsu, dan simulator; **tidak pernah mengirim order terminal**.
+- Wajib ada regresi untuk: indikator vs ekspor TradingView (toleransi dicatat di test); kasus strategi (BUY/SELL valid, cross di luar OB/OS, candle belum tertutup, SL di sisi salah, riwayat kurang dari warm-up, sinyal duplikat, doji); SL dan TP pada candle yang sama; **uji look-ahead** (sinyal pada bar `t` tidak berubah bila bar setelah `t` dihapus); reproduksibilitas run; gate AI per aturan.
+- Manajemen indikator/strategi: uji CRUD bolak-balik; versi yang terpakai tidak dapat diubah; hapus yang terrujuk menjadi arsip; validasi menolak nilai di luar batas; apply ke chart tidak memanggil jalur eksekusi; apply ke PAPER/DEMO ditolak bila status tidak mengizinkan atau data kurang dari warm-up; impor menolak closed-source dan konstruksi `unsupported`; `verified` mensyaratkan uji kecocokan; tidak ada `eval`/`exec` pada kode pengguna atau AI.
+- Jangan mengklaim kode terkompilasi/teruji bila belum dijalankan. Laporkan lingkungan, perintah, hasil aktual, dan pemeriksaan yang belum dilakukan. Pengujian mock tidak membuktikan integrasi Windows/MT5.
+- Perbarui `WORKLOG.md` setelah pekerjaan bermakna; ubah status roadmap hanya dengan bukti.
+- Laporan akhir: hasil, file utama, verifikasi, keterbatasan. Jangan menyebut selesai bila kriteria belum terpenuhi.
+
+### Keputusan terbuka (tanyakan ke pemilik; jangan ditebak)
+
+1. Lokasi MT5 dibanding API (Docker/host lain), broker, dan simbol (mis. `XAUUSDm`).
+2. Provider AI utama (Anthropic / Gemini / offline) dan model aktif.
+3. Database hasil backtest: Postgres atau SQLite. Harus satu.
+4. Urutan pengujian pilihan parameter ambigu method Gold M1 (filter EMA, sentuhan BB, lookback OB/OS, nilai SL, harga fill).
+5. Ambang kelulusan strategi dan ambang gate AI.
+6. Bentuk indikator hasil terjemahan: rakitan primitif deklaratif atau modul Python yang direview, dan format aturan strategi (JSON deklaratif) yang dipakai.
+7. Repo dijadikan private atau tidak (ada `trading_agent.db` ter-commit; periksa isinya, tambahkan ke `.gitignore`).
+
+### Operasi dan batas lingkup
+
+- Jangan menyalakan worker, ARM, memigrasikan atau menghapus data, mengganti akun terminal, atau deployment sebagai efek samping.
+- Jangan mengunduh histori besar atau menjalankan batch backtest masif tanpa diminta; mulai dari rentang kecil (mis. 3-6 bulan M1) dan perluas bertahap.
+- Jangan mengambil script TradingView secara massal atau otomatis; ambil hanya yang diminta pengguna, satu per satu.
+- Jangan stage, commit, push, atau membuat repository kecuali diminta.
+- Bila aturan bentrok atau tidak jelas, berhenti dan tanyakan.
+
+
 ## Referensi integrasi yang dibahas
 
 - [MT5 Python integration](https://www.mql5.com/en/docs/python_metatrader5): akses data, akun, dan operasi terminal.

@@ -4,17 +4,36 @@ Catatan kelanjutan sesi. Aturan kerja berada di [AGENTS.md](AGENTS.md), fakta te
 
 ## Current Handoff
 
-- **Permintaan aktif**: Refactoring & Modularisasi Total `App.tsx` (Clean Code Architecture) dan pembersihan elemen redundan.
-- **Status**: Kode frontend telah disederhanakan total menjadi arsitektur modular yang sangat rapi dan reusable (`SidebarNav`, `WorkspaceHeader`, `AiAnalystCard`, `FundamentalPanel`, `HelpDialog`, `SymbolDialog`, `AccountPanel`, `RiskCalculator`). Seluruh 18/18 e2e browser test Playwright telah diverifikasi LULUS 100%.
-- **Lokasi**: `frontend/src/` (`App.tsx`, `components/*`, `lib/api.ts`, `tests/workspace.spec.ts`).
-- **Hasil Verifikasi**: Build TypeScript/Vite sukses (`npm run build`). Seluruh 18 e2e browser test Playwright lulus (18/18 passed). Container `ai-trading-api` telah disinkronkan dan direstart.
-- **Langkah berikutnya**: Melanjutkan ke Prioritas 3 (Pengaturan Alokasi Modal, Profil Risiko, dan Tiket Order Manual).
+- **Permintaan aktif**: Implementasi Strategy Lab dan perbaikan query timeframe chart yang terkirim sebagai `1H`.
+- **Status**: Manajemen indikator/strategi dan backtest research sudah tersedia dan aktif pada container. Pekerjaan lanjutan masih dibutuhkan untuk impor histori terminal aktual, verifikasi parity TradingView, serta apply ke shadow/PAPER/DEMO.
+- **Lokasi**: `frontend/src/hooks/useMarketData.ts`, `frontend/src/hooks/useAiAnalysis.ts`, `app/api/endpoints.py`, `mt5_bridge.py`, serta modul `app/lab/` dan `frontend/src/components/lab/`.
+- **Hasil Verifikasi terbaru**: Build frontend lulus; domain Strategy Lab 14/14 dan UI Lab desktop/mobile 2/2 lulus; `/api/lab/catalog` aktif dengan 7 indikator bawaan; volume `lab_data` terpasang dan writable. Normalisasi interval juga lulus 4/4 tes ingest dan request aktual `1H` merespons HTTP 200.
+
+
+- **Langkah berikutnya**: Impor histori XAUUSDm M1 dari terminal aktual, buat timeframe turunan, lalu verifikasi adaptasi BOSWaves terhadap ekspor referensi sebelum menilai hasil backtest.
 
 ## Aturan pencatatan
 
 Perbarui Current Handoff dan tambahkan entri setelah pekerjaan bermakna. Catat permintaan, perubahan, bukti pemeriksaan, masalah terbuka, dan langkah berikutnya. Jangan memasukkan secrets, dump akun, log mentah besar, atau percakapan penuh. Jangan mengubah status rencana menjadi selesai hanya karena file implementasi sudah ada.
 
 ## Task Entries
+
+### 2026-10-04 — Strategy Lab: manajemen indikator, strategi, dataset, dan backtest
+
+- **UI aktif**: Sidebar **Indikator & strategi** membuka Strategy Lab dengan tab Data historis, Indikator & strategi, dan Backtest.
+- **Manajemen**: Buat, lihat, ubah sebagai versi baru, arsip/pulihkan, clone, ekspor/impor JSON, diff versi, hitungan pemakaian, parameter form dari schema, dan apply ke chart historis.
+- **Indikator**: SMA, EMA, ATR Wilder, RSI Wilder, Bollinger population, ALMA, dan adaptasi numerik BOSWaves draft. Source Pine disimpan dengan provenance dan tidak dieksekusi.
+- **Data/backtest**: Dataset candle tertutup UTC berupa snapshot NPZ immutable ber-checksum; metadata/run/audit di PostgreSQL; backtest next-open dengan biaya eksplisit, SL-first, sizing risiko, snapshot versi, status incomplete/cancelled/interrupted, ledger, kurva equity, Wilson 95%, break-even, expectancy R, profit factor, dan drawdown.
+- **Deploy**: Container aktif memakai `PYTHONPATH=/app:/app/src` dan volume persisten `lab_data`; `/api/lab/catalog` mengembalikan HTTP 200.
+- **Verifikasi**: 14/14 tes domain Strategy Lab, 2/2 Playwright desktop/mobile, dan frontend production build lulus. Tidak ada order MT5 dikirim.
+- **Belum selesai**: histori terminal aktual belum dimasukkan; parity BOSWaves vs TradingView belum dibuktikan; source Pine selain contoh disimpan sebagai unsupported/review; sinyal live dan eksekusi tetap terpisah.
+
+### 2026-10-04 — Normalisasi huruf timeframe chart
+
+- **Masalah**: Request dengan `interval=1H` ditolak sebagai `Unsupported interval`, sementara kontrak internal menyimpan timeframe sebagai `1h`.
+- **Implementasi**: Frontend menormalisasi timeframe sebelum membangun query dan query key. API chart, API analisis, dan bridge MT5 juga menormalisasi input dengan `strip().lower()` sebagai perlindungan pada batas sistem.
+- **Regresi**: Menambahkan pengujian bahwa data cache `1h` dapat diminta memakai `1H`.
+- **Verifikasi**: `npm run build` lulus; `tests.test_market_ingest` 4/4 lulus di Python 3.11; request ke API lokal memakai `1H` merespons HTTP 200 dengan payload `interval: "1h"`.
 
 ### 2026-10-03 — Modularisasi Total Frontend & Perbaikan Test Suite Playwright (18/18 Pass)
 

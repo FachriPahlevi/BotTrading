@@ -104,7 +104,7 @@ async function mockApi(
     } })
     if (url.pathname === '/api/ai/analyze') return route.fulfill({ json: {
       symbol: url.searchParams.get('symbol') || 'XAUUSDm',
-      interval: url.searchParams.get('interval') || '1H',
+      interval: url.searchParams.get('interval') || '1h',
       bias: 'LONG',
       confidence: 82,
       rationale: ['Struktur bullish di atas EMA-14', 'Support kunci di swing low'],

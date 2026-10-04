@@ -169,3 +169,124 @@ class BacktestEngine:
         columns = ["ticket", "symbol", "direction", "volume", "open_price", "close_price", "open_time", "close_time", "pnl", "commission", "net_pnl", "exit_reason"]
         df = pd.DataFrame(trades, columns=columns if not trades else None)
         df.to_csv(filepath, index=False)
+
+
+def run_research_backtest(frame, strategy, settings, progress=None):
+    """Versioned Lab entry point: bid OHLC, next-open fills, one position, SL first.
+
+    The live RiskEngine uses wall-clock/account state, so research uses explicit
+    snapshot sizing and costs and never instantiates a terminal adapter.
+    """
+    import math
+    from trading_agent.lab_rules import signals
+    from trading_agent.models import round_down_volume
+
+    side, distances, required = signals(frame, strategy)
+    costs = settings['costs']
+    spread, slip = costs['spread'], costs['slippage']
+    contract = costs['contract_size']
+    initial = settings['initial_balance']
+    balance, peak, max_dd = initial, initial, 0.0
+    trades, equity = [], []
+    position = None
+    skipped = 0
+    cancelled = False
+    rows = list(frame.itertuples(index=False))
+
+    def close_position(price, at, reason):
+        nonlocal balance, position
+        pos = position
+        gross = (price-pos['entry'])*pos['direction']*pos['volume']*contract
+        net = gross-pos['commission']
+        balance += gross
+        trades.append({**pos, 'exit': float(price), 'exit_time': int(at), 'exit_reason': reason,
+                       'gross_pnl': float(gross), 'net_pnl': float(net), 'net_r': float(net/pos['risk_amount'])})
+        position = None
+
+    i = required
+    for i in range(required+1, len(rows)):
+        bar, previous = rows[i], rows[i-1]
+        if i % 250 == 0 and progress and not progress(int(i/len(rows)*100)):
+            cancelled = True
+            i -= 1
+            break
+        direction = int(side[i-1])
+        # A persistent condition is one setup; require a new edge after it resets.
+        new_setup = direction != 0 and (i < 2 or side[i-2] != direction)
+        if position is None and new_setup and balance > 0:
+            dist = float(distances[i-1])
+            entry = bar.open+(spread if direction == 1 else 0)+direction*slip
+            stop = previous.close-direction*dist
+            target = previous.close+direction*dist*strategy['target_r']
+            risk = (entry-stop)*direction
+            if risk <= 0 or (target-entry)*direction <= 0:
+                skipped += 1
+            else:
+                budget = balance*settings['risk_percent']/100
+                # Include expected adverse stop slippage and commission in sizing.
+                loss_per_lot = (risk+slip)*contract+costs['commission_per_lot']
+                volume = round_down_volume(min(budget/loss_per_lot, costs['volume_max']), costs['volume_min'], costs['volume_step'])
+                if volume < costs['volume_min']:
+                    skipped += 1
+                else:
+                    commission = volume*costs['commission_per_lot']
+                    balance -= commission
+                    position = dict(direction=direction, entry=float(entry), stop=float(stop), target=float(target),
+                                    signal_time=int(previous.time), entry_time=int(bar.time), volume=float(volume),
+                                    commission=float(commission), risk_amount=float(loss_per_lot*volume))
+        if position:
+            pos = position
+            offset = spread if pos['direction'] == -1 else 0
+            high, low, opening = bar.high+offset, bar.low+offset, bar.open+offset
+            if pos['direction'] == 1:
+                stopped, target_hit = low <= pos['stop'], high >= pos['target']
+                stop_fill = min(pos['stop'], opening)-slip
+            else:
+                stopped, target_hit = high >= pos['stop'], low <= pos['target']
+                stop_fill = max(pos['stop'], opening)+slip
+            if stopped:
+                close_position(stop_fill, bar.time, 'SL_FIRST' if target_hit else 'SL')
+            elif target_hit:
+                close_position(pos['target']-pos['direction']*slip, bar.time, 'TP')
+        mark = balance
+        if position:
+            px = bar.close+(spread if position['direction'] == -1 else 0)
+            mark += (px-position['entry'])*position['direction']*position['volume']*contract
+        peak = max(peak, mark)
+        max_dd = max(max_dd, (peak-mark)/peak*100 if peak else 0)
+        # Keep UI/result size bounded; trade ledger itself is complete.
+        if i % max(1, len(rows)//2000) == 0 or i == len(rows)-1:
+            equity.append(dict(time=int(bar.time), balance=float(balance), equity=float(mark)))
+        if len(trades) >= settings['target_trades']:
+            break
+    if position:
+        bar = rows[i]
+        price = bar.close+(spread if position['direction'] == -1 else 0)-position['direction']*slip
+        close_position(price, bar.time, 'CANCELLED' if cancelled else 'END_OF_DATA')
+    if rows:
+        peak = max(peak, balance)
+        max_dd = max(max_dd, (peak-balance)/peak*100 if peak else 0)
+        equity.append(dict(time=int(rows[i].time), balance=float(balance), equity=float(balance)))
+    n = len(trades)
+    wins = [t for t in trades if t['net_pnl'] > 0]
+    losses = [t for t in trades if t['net_pnl'] <= 0]
+    p = len(wins)/n if n else None
+    interval = None
+    if n:
+        z = 1.95996398454
+        center = (p+z*z/(2*n))/(1+z*z/n)
+        half = z*math.sqrt(p*(1-p)/n+z*z/(4*n*n))/(1+z*z/n)
+        interval = [(center-half)*100, (center+half)*100]
+    loss_total = -sum(t['net_pnl'] for t in losses)
+    avg_win = sum(t['net_pnl'] for t in wins)/len(wins) if wins else None
+    avg_loss = loss_total/len(losses) if losses else None
+    return dict(status='cancelled' if cancelled else 'complete' if n >= settings['target_trades'] else 'incomplete',
+                total_trades=n, target_trades=settings['target_trades'], skipped_setups=skipped,
+                initial_balance=initial, final_balance=balance, net_return=balance-initial,
+                win_rate_pct=p*100 if p is not None else None, wilson_95=interval,
+                breakeven_win_rate_pct=100*avg_loss/(avg_win+avg_loss) if avg_win and avg_loss else None,
+                breakeven_note='Empiris dari rata-rata win/loss net biaya; belum tersedia jika salah satu sampel kosong.',
+                profit_factor=sum(t['net_pnl'] for t in wins)/loss_total if loss_total else None,
+                max_drawdown_pct=max_dd, expectancy_r=sum(t['net_r'] for t in trades)/n if n else None,
+                trades=trades, equity_curve=equity, warmup_bars=required,
+                policy='Bid OHLC; next-open; fixed TP; one position; SL-first; spread/slippage/round-trip commission; forced-end exit.')

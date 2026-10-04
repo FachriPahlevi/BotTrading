@@ -117,6 +117,7 @@ def receive_mt5_candles(payload: dict):
 def get_market_chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 160):
     """Proxy XAUUSD / XAUUSDm candles from a local bridge connected to MetaTrader 5."""
     symbol = symbol.strip()
+    interval = interval.strip().lower()
     allowed_intervals = {"1m", "5m", "15m", "1h", "4h", "1d"}
     if not symbol.isalnum() or len(symbol) > 20:
         raise HTTPException(status_code=400, detail="Invalid market symbol")
@@ -409,6 +410,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
 @router.get("/ai/analyze")
 def get_ai_analysis(symbol: str = "XAUUSDm", interval: str = "1h"):
     symbol = symbol.strip()
+    interval = interval.strip().lower()
     allowed_intervals = {"1m", "5m", "15m", "1h", "4h", "1d"}
     if not symbol.isalnum() or len(symbol) > 20:
         raise HTTPException(status_code=400, detail="Invalid market symbol")
@@ -430,4 +432,3 @@ def get_ai_analysis(symbol: str = "XAUUSDm", interval: str = "1h"):
 
     candles = cached_entry["payload"].get("candles", []) if cached_entry else []
     return analyze_market_chart(symbol, interval, candles)
-

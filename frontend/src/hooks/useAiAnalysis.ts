@@ -7,7 +7,10 @@ export async function fetchAiAnalysis(
   interval: string,
   signal?: AbortSignal,
 ): Promise<AiAnalysisResult> {
-  const query = new URLSearchParams({ symbol, interval }).toString()
+  const query = new URLSearchParams({
+    symbol,
+    interval: interval.trim().toLowerCase(),
+  }).toString()
   return apiGet<AiAnalysisResult>(`/api/ai/analyze?${query}`, signal)
 }
 
