@@ -79,7 +79,9 @@ async function mockApi(
   )
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url())
+    if (url.pathname.includes('/src/')) return route.continue()
     if (options.failed)
+
       return route.fulfill({
         status: 503,
         json: { detail: 'MT5 bridge unavailable' },
@@ -130,6 +132,8 @@ test('live chart, timeframe, signal overlays and risk calculator work without mu
   const mutations: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   page.on('request', (request) => {
+
+
     if (request.url().includes('/api/') && request.method() !== 'GET')
       mutations.push(request.method())
   })

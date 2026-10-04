@@ -9,7 +9,10 @@ export async function apiGet<T>(
   signal?: AbortSignal,
   options?: ApiRequestOptions,
 ): Promise<T> {
-  const requestSignal = signal ?? (options?.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined)
+  const timeout = options?.timeoutMs ?? 12_000
+  const fetchSignal = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
+    : AbortSignal.timeout(timeout)
 
   const response = await fetch(url, {
     method: 'GET',
@@ -17,7 +20,7 @@ export async function apiGet<T>(
       Accept: 'application/json',
       ...options?.headers,
     },
-    signal: requestSignal,
+    signal: fetchSignal,
   })
 
   if (!response.ok) {
@@ -38,7 +41,10 @@ export async function apiPost<T, D = unknown>(
   signal?: AbortSignal,
   options?: ApiRequestOptions,
 ): Promise<T> {
-  const requestSignal = signal ?? (options?.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined)
+  const timeout = options?.timeoutMs ?? 12_000
+  const fetchSignal = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
+    : AbortSignal.timeout(timeout)
 
   const response = await fetch(url, {
     method: 'POST',
@@ -48,7 +54,7 @@ export async function apiPost<T, D = unknown>(
       ...options?.headers,
     },
     body: data ? JSON.stringify(data) : undefined,
-    signal: requestSignal,
+    signal: fetchSignal,
   })
 
   if (!response.ok) {

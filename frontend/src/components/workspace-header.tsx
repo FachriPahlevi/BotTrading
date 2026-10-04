@@ -37,8 +37,9 @@ export function WorkspaceHeader({
             Workspace Utuh · {symbol}
           </h1>
           <p className="text-[11px] text-muted-foreground">
-            Market feed {interval} · MT5 EA Status
+            Market feed {interval} · Simbol diterima: {symbol}
           </p>
+
         </div>
       </div>
 
@@ -54,8 +55,10 @@ export function WorkspaceHeader({
         </div>
         <Badge variant={fresh ? 'default' : 'destructive'} className="gap-1">
           {fresh ? <Radio className="size-3" /> : <WifiOff className="size-3" />}
-          {fresh ? 'Live' : 'Stale / Terputus'}
+          {fresh ? 'Live' : 'Offline'}
         </Badge>
+
+
         <Button
           variant="outline"
           size="icon"

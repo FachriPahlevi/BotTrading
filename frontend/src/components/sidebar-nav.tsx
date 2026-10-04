@@ -50,10 +50,11 @@ export function SidebarNav({
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-[216px] flex-col border-r border-border bg-[#0d131b] transition-transform lg:translate-x-0',
+          'fixed lg:static inset-y-0 left-0 z-40 flex w-[216px] shrink-0 flex-col border-r border-border bg-[#0d131b] transition-transform lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
+
         <a
           href="#workspace"
           className="flex h-[76px] items-center gap-3 px-6"
