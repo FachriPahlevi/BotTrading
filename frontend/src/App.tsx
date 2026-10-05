@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 
 const intervals = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const LabPanel = lazy(() => import("@/components/lab/lab-panel").then(m => ({default: m.LabPanel})));
+const IndicatorManagerPage = lazy(() => import("@/components/lab/indicator-manager-page").then(m => ({default: m.IndicatorManagerPage})));
 
 const MarketChart = lazy(() =>
   import("@/components/market-chart").then((module) => ({
@@ -107,7 +108,7 @@ export default function App() {
           <WorkspaceHeader onMobileOpenToggle={() => setMobileOpen(!mobileOpen)} symbol={symbol} interval={interval} fresh={fresh} fetching={fetching} updatedAt={market.data?.updated_at} onRefresh={refresh} />
 
           <div className="flex-1 space-y-6 p-4 md:p-6">
-            <AccountPanel account={account} loading={accountQuery.isPending} error={accountError} />
+            {activeTab !== "indicators" && activeTab !== "lab" && <AccountPanel account={account} loading={accountQuery.isPending} error={accountError} />}
 
             {activeTab === "workspace" && (
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -155,7 +156,7 @@ export default function App() {
                       ) : !market.data || market.data.candles.length === 0 ? (
                         <div className="flex min-h-[400px] items-center justify-center text-xs text-muted-foreground">Chart siap. Menunggu feed MT5.</div>
                       ) : (
-                        <MarketChart market={market.data} signal={selectedSignal} overlays={aiAnalysis?.chart_overlays} />
+                        <MarketChart market={market.data} signal={selectedSignal} overlays={aiAnalysis?.chart_overlays} onOpenIndicatorManager={() => setActiveTab("indicators")} />
                       )}
                     </Suspense>
                   </Card>
@@ -177,6 +178,7 @@ export default function App() {
             {activeTab === "fundamental" && <FundamentalPanel summary={summary.data} />}
 
             {activeTab === "logs" && <LogPanel />}
+            {activeTab === "indicators" && <Suspense fallback={<p>Memuat manajemen indikator…</p>}><IndicatorManagerPage /></Suspense>}
             {activeTab === "lab" && <Suspense fallback={<p>Memuat Strategy Lab…</p>}><LabPanel /></Suspense>}
           </div>
         </main>

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.db.session import get_db
 from app.lab.models import LabItem, LabVersion, LabRun, LabAudit
-from app.lab.schemas import ItemInput, DatasetInput, ImportSource, RunInput, PreviewInput, HistoryRequest
+from app.lab.schemas import ItemInput, DatasetInput, ImportSource, RunInput, PreviewInput, HistoryRequest, ChartIndicatorsInput
 from app.lab import datasets, service, jobs
 from trading_agent.lab_indicators import REGISTRY
 from trading_agent.lab_rules import evaluate_indicators, signals
@@ -45,6 +45,12 @@ def catalog(db: Session = Depends(get_db)):
 @router.post('/indicators/import')
 def import_indicator(payload: ImportSource, db: Session = Depends(get_db)):
     return checked(lambda: service.import_pine(db, payload))
+
+
+@router.put('/indicators/{item_id}/source')
+def update_indicator_source(item_id: str, payload: ImportSource, db: Session = Depends(get_db)):
+    """Store edited Pine as a new immutable version; source is never executed."""
+    return checked(lambda: service.update_pine(db, item_id, payload))
 
 
 @router.get('/example-source')
@@ -167,6 +173,25 @@ def preview(payload: PreviewInput, db: Session = Depends(get_db)):
         return dict(candles=frame.iloc[start:].to_dict('records'), lines=lines, instances=instances, warmup_bars=required,
                     dataset_id=dataset.spec['dataset_id'], symbol=dataset.spec['symbol'], interval=dataset.spec['interval'],
                     note='Pratinjau dataset historis; bukan feed live. Maksimal 2.000 bar terakhir; perhitungan memakai seluruh dataset.')
+    return checked(calculate)
+
+
+@router.post('/indicators/calculate')
+def calculate_chart_indicators(payload: ChartIndicatorsInput, db: Session = Depends(get_db)):
+    """Calculate configured indicators for dashboard candles using the shared domain implementation."""
+    def calculate():
+        frame = pd.DataFrame([bar.model_dump() for bar in payload.candles])
+        if frame.time.duplicated().any() or not frame.time.is_monotonic_increasing:
+            raise ValueError('Candle dashboard harus unik dan berurutan naik.')
+        instances = service.resolve_instances(db, payload.indicators)
+        outputs, required = evaluate_indicators(frame, instances)
+        lines = {key: [None if pd.isna(value) else float(value) for value in series]
+                 for key, series in outputs.items() if '.' in key}
+        return dict(lines=lines, instances=instances, warmup_bars=required,
+                    ready=len(frame) > required, candles=len(frame), symbol=payload.symbol,
+                    interval=payload.interval,
+                    note=(f'Valid setelah warm-up {required} candle tertutup.' if len(frame) > required
+                          else f'Belum valid: perlu >{required} candle tertutup; tersedia {len(frame)}.'))
     return checked(calculate)
 
 

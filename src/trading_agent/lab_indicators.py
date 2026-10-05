@@ -26,7 +26,9 @@ REGISTRY = {
         'devLen': field(34, 5, 2000, True), 'devMult': field(.65, .1, 3), 'slopeLen': field(3, 1, 10, True),
         'slopeMin': field(.08, 0, 1), 'atrLen': field(14, 5, 500, True), 'stopLookback': field(12, 3, 50, True),
         'minStopAtr': field(.75, .25, 3), 'maxStopAtr': field(3, 1, 8),
-    }, outputs=['alma', 'upper', 'lower', 'edge', 'trend', 'bull_flip', 'bear_flip', 'risk']),
+        'targetCount': field(4, 2, 4, True), 'zonePct': field(.06, .01, .25),
+        'extendBars': field(30, 5, 200, True), 'keepPositions': field(4, 1, 12, True),
+    }, outputs=['alma', 'mid', 'edge', 'edge_glow', 'upper', 'lower', 'conviction', 'trend', 'bull_flip', 'bear_flip', 'risk', 'entry', 'stop', 'target1', 'target2', 'target3', 'target4']),
 }
 
 

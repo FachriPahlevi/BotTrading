@@ -467,7 +467,7 @@ Fakta di repo:
 - Chart frontend sudah mendukung `chart_overlays`; analisis AI saat ini hanya garis horizontal dari metrik ringkas.
 - Belum ada registry indikator, penyimpanan strategi, maupun mesin backtest.
 
-Pembaruan implementasi setelah baseline di atas: registry indikator, strategi terversi, dataset snapshot NPZ ber-checksum, API/UI manajemen, pratinjau chart, serta backtest research deterministik telah ditambahkan. Pengujian domain Strategy Lab 14/14 dan UI desktop/mobile 2/2 lulus. Histori tiga bulan dari terminal aktual belum diimpor, kecocokan BOSWaves dengan TradingView belum diverifikasi, dan apply ke sinyal live/PAPER/DEMO belum diimplementasikan. Karena itu baseline di atas tetap berguna sebagai catatan awal, bukan status runtime terbaru.
+Pembaruan implementasi setelah baseline di atas: registry indikator, strategi terversi, dataset snapshot NPZ ber-checksum, halaman manajemen indikator terpisah, editor source Pine terversi, konfigurator/favorit indikator pada chart dashboard, pratinjau chart, serta backtest research deterministik telah ditambahkan. Pengujian domain Strategy Lab 15/15 dan alur UI terkait desktop/mobile 4/4 lulus. Histori tiga bulan dari terminal aktual belum diimpor, kecocokan BOSWaves dengan TradingView belum diverifikasi, dan apply ke sinyal live/PAPER/DEMO belum diimplementasikan. Karena itu baseline di atas tetap berguna sebagai catatan awal, bukan status runtime terbaru.
 
 Draf yang **belum dikompilasi/diuji** dan bukan bukti fitur berjalan: `AurumBridge.mq5` (v1.4), `AurumBridgeV2.mq5`, `ai_features.py`, `ai_gate.py`, `ai_agent.py`. Perlakukan sebagai referensi. Draf ini harus lulus pengujian sebelum digabung, dan `AurumBridgeV2.mq5` wajib direvisi lebih dulu (magic 998877, blokir REAL/CONTEST, pertahankan log `instance_id`, jadi eksekutor yang dipicu state machine).
 
@@ -530,6 +530,8 @@ Draf yang **belum dikompilasi/diuji** dan bukan bukti fitur berjalan: `AurumBrid
 ### Manajemen indikator dan strategi (CRUD + apply)
 
 Tujuan: pengguna mengelola indikator dan strategi dari UI dengan mudah, tanpa menyentuh kode.
+
+Status tambahan 2026-10-04: toolbox gambar manual dan manajemen layout lokal telah tersedia pada chart. Garis, zona, penggaris, Fibonacci, channel, brush, dan teks dapat disimpan otomatis, dipilih ulang, diduplikat, serta diekspor/impor JSON. Sinkronisasi layout berbasis akun/server tetap backlog karena aplikasi belum memiliki autentikasi pengguna web. BOSWaves kini memiliki renderer khusus untuk ribbon, entry/stop, label dan zona target 1R–4R, serta beberapa posisi historis. Parity visual/numerik belum selesai sampai diuji pada candle dan input TradingView yang identik; target-hit styling, candle gradient, dan alert Pine masih backlog.
 
 #### Entitas
 - **Definisi indikator**: `bawaan` (read-only, diimplementasikan di kode) atau `pengguna` (hasil impor/terjemahan, dapat diubah).

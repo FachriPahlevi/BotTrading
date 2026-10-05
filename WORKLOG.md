@@ -4,13 +4,13 @@ Catatan kelanjutan sesi. Aturan kerja berada di [AGENTS.md](AGENTS.md), fakta te
 
 ## Current Handoff
 
-- **Permintaan aktif**: Implementasi Strategy Lab dan perbaikan query timeframe chart yang terkirim sebagai `1H`.
-- **Status**: Manajemen indikator/strategi dan backtest research sudah tersedia dan aktif pada container. Pekerjaan lanjutan masih dibutuhkan untuk impor histori terminal aktual, verifikasi parity TradingView, serta apply ke shadow/PAPER/DEMO.
-- **Lokasi**: `frontend/src/hooks/useMarketData.ts`, `frontend/src/hooks/useAiAnalysis.ts`, `app/api/endpoints.py`, `mt5_bridge.py`, serta modul `app/lab/` dan `frontend/src/components/lab/`.
-- **Hasil Verifikasi terbaru**: Build frontend lulus; domain Strategy Lab 14/14 dan UI Lab desktop/mobile 2/2 lulus; `/api/lab/catalog` aktif dengan 7 indikator bawaan; volume `lab_data` terpasang dan writable. Normalisasi interval juga lulus 4/4 tes ingest dan request aktual `1H` merespons HTTP 200.
+- **Permintaan aktif**: Toolbox gambar chart, layout tersimpan, dan penjelasan selisih BOSWaves terhadap TradingView.
+- **Status**: Toolbox dan manajemen layout lokal sudah diimplementasikan. Renderer generik BOSWaves yang keliru sudah diganti renderer ribbon/posisi khusus. Parity tetap belum dinyatakan selesai karena screenshot pembanding memakai OANDA XAUUSD 1D, berbeda dari feed Exness XAUUSDm.
+- **Lokasi**: `frontend/src/components/chart-drawing-manager.tsx`, `frontend/src/components/market-chart.tsx`, `frontend/tests/drawing-layouts.spec.ts`, serta implementasi BOSWaves di `src/trading_agent/boswaves.py`.
+- **Hasil Verifikasi terbaru**: Build frontend lulus; enam pengujian browser terarah lulus secara serial pada desktop/mobile; 16 pengujian domain Strategy Lab lulus, termasuk relasi flip terhadap entry/SL/T4. Renderer BOSWaves baru diperiksa dengan 160 candle XAUUSDm yang sempat tersedia dan tampil tanpa page error.
 
 
-- **Langkah berikutnya**: Impor histori XAUUSDm M1 dari terminal aktual, buat timeframe turunan, lalu verifikasi adaptasi BOSWaves terhadap ekspor referensi sebelum menilai hasil backtest.
+- **Langkah berikutnya**: Impor histori terminal aktual lalu bandingkan BOSWaves dengan ekspor candle dan output indikator TradingView pada provider, simbol, timeframe, input, sesi, dan rentang yang sama sebelum menerjemahkan lifecycle target/ribbon secara lengkap.
 
 ## Aturan pencatatan
 
@@ -18,14 +18,42 @@ Perbarui Current Handoff dan tambahkan entri setelah pekerjaan bermakna. Catat p
 
 ## Task Entries
 
+### 2026-10-04 — Koreksi renderer BOSWaves
+
+- **Masalah aktual**: Chart sebelumnya menggambar `alma`, `upper`, `lower`, dan `edge` sebagai garis generik. Pada Pine asli, `upper/lower` adalah batas konfirmasi internal; visual utamanya adalah gradient ribbon dan objek posisi. Karena itu hasil aplikasi memang berbeda jauh dari TradingView, bukan sekadar beda broker.
+- **Perbaikan**: Menambahkan edge glow, edge/mid/ALMA berwarna mengikuti tren dan gap pada candle flip. Menambahkan rekonstruksi posisi berupa LONG/SHORT, SL -1R, T1–T4, zona risiko/target, proyeksi ke kanan, dan posisi historis terbatas.
+- **Konfigurasi**: Menambahkan `targetCount`, `zonePct`, `extendBars`, dan `keepPositions` ke schema dinamis. Builtin menghasilkan versi immutable baru saat definisi resmi berubah; versi lama tetap tersimpan.
+- **Verifikasi**: Frontend build lulus; Playwright terarah 6/6 lulus secara serial pada desktop/mobile. Strategy Lab 16/16 lulus di container, termasuk regresi bahwa entry, stop, dan target 4R mengikuti flip/risk tanpa data masa depan. Smoke visual dengan 160 candle XAUUSDm menampilkan ribbon dan level posisi tanpa page error sebelum restart cache.
+- **Runtime lokal**: API dan database kembali running/healthy; catalog aktif memuat BOSWaves v2 dan parameter target. Image lokal diperbarui menjadi `aitrading-ai-trading:latest` (`sha256:69419da...`). Restart API mengosongkan cache akun/candle in-memory, sehingga feed MT5 perlu mengirim snapshot berikutnya sebelum chart live kembali tersedia.
+- **Batasan**: Ini rekonstruksi visual dari source Pine yang diberikan, belum bukti pixel/numerical parity. Target-hit fade/highlight, candle gradient, dan alerts belum diterjemahkan. Perbandingan sah memerlukan ekspor OANDA:XAUUSD 1D dengan input dan rentang yang sama; feed Exness XAUUSDm H1 tidak akan identik.
+
+### 2026-10-04 — Toolbox gambar dan layout chart tersimpan
+
+- **Toolbox**: Menambahkan garis tren, ray, horizontal, vertikal, zona/persegi, penggaris harga/persen/jumlah bar, Fibonacci retracement, price channel, garis paralel, brush, dan teks.
+- **Layout**: Gambar manual autosave setelah selesai, digeser, atau dihapus. Layout dapat dibuat, dipilih, dinamai ulang, diduplikat, dikunci, disembunyikan, dihapus, serta diekspor/impor JSON. Data divalidasi dan dibatasi 24 layout/200 objek; penyimpanan lokal per browser.
+- **Isolasi**: Hanya overlay `manual` yang dikelola; marker sinyal dan AI tidak ikut terhapus atau tersimpan sebagai gambar pengguna.
+- **BOSWaves**: Selisih dengan screenshot dijelaskan oleh dua hal yang terverifikasi: implementasi aplikasi baru mencakup core numerik tanpa objek visual/lifecycle target Pine, dan pembanding memakai OANDA XAUUSD 1D sedangkan aplikasi memakai feed Exness XAUUSDm. Parity belum diuji dengan dataset/input identik.
+- **Verifikasi**: `npm run build` lulus. Playwright terarah untuk gambar/layout, manajemen indikator, dan Strategy Lab lulus 6/6 pada desktop/mobile. Tes gambar melakukan klik pada canvas lalu memeriksa autosave dan duplikasi geometri.
+- **Runtime lokal**: Build `frontend/dist` disalin ke container API aktif dan image lokal `aitrading-ai-trading:latest` diperbarui (`sha256:bbf03bb...`). Smoke Chromium pada `localhost:8000/workspace/` membuka dialog toolbox dan menemukan Fibonacci tanpa page error; health API tetap 200.
+- **Batasan**: Layout belum tersinkron antarbrowser/perangkat karena belum ada akun pengguna web. Implementasi ini tidak mengirim order atau mengubah worker/ARM.
+
+### 2026-10-04 — Halaman indikator terpisah dan konfigurator chart
+
+- **Navigasi**: Memisahkan halaman **Manajemen indikator** dari **Strategi & backtest**.
+- **Editor**: Source Pine hasil impor dapat diedit di textarea monospace dan disimpan sebagai versi immutable baru beserta author, lisensi, hash, dan status unsupported/draft. Definisi bawaan tetap read-only.
+- **Dashboard**: Tombol Indikator pada chart membuka dialog pencarian, Semua/Favorit, tambah hingga 32 instance, show/hide, hapus dari chart, dan form parameter dari schema. Konfigurasi chart dan favorit disimpan di localStorage browser.
+- **Konsistensi**: Dashboard mengirim candle tertutup dan versi indikator ke endpoint kalkulasi; endpoint memakai implementasi indikator yang sama dengan preview/backtest serta menampilkan status warm-up.
+- **Batasan**: Editor bukan runtime Pine. Source bebas tidak dijalankan; agar tampil pada chart, script perlu adaptasi domain yang didukung dan diverifikasi. Favorit saat ini lokal per browser karena aplikasi belum memiliki akun pengguna web.
+- **Verifikasi**: Domain Python 15/15 lulus; Playwright 4/4 lulus untuk desktop/mobile; frontend production build lulus; smoke browser pada container aktif lulus tanpa page error.
+
 ### 2026-10-04 — Strategy Lab: manajemen indikator, strategi, dataset, dan backtest
 
-- **UI aktif**: Sidebar **Indikator & strategi** membuka Strategy Lab dengan tab Data historis, Indikator & strategi, dan Backtest.
+- **UI aktif**: Sidebar **Manajemen indikator** membuka library/editor terpisah; **Strategi & backtest** berisi Strategi, Data historis, dan Backtest.
 - **Manajemen**: Buat, lihat, ubah sebagai versi baru, arsip/pulihkan, clone, ekspor/impor JSON, diff versi, hitungan pemakaian, parameter form dari schema, dan apply ke chart historis.
 - **Indikator**: SMA, EMA, ATR Wilder, RSI Wilder, Bollinger population, ALMA, dan adaptasi numerik BOSWaves draft. Source Pine disimpan dengan provenance dan tidak dieksekusi.
 - **Data/backtest**: Dataset candle tertutup UTC berupa snapshot NPZ immutable ber-checksum; metadata/run/audit di PostgreSQL; backtest next-open dengan biaya eksplisit, SL-first, sizing risiko, snapshot versi, status incomplete/cancelled/interrupted, ledger, kurva equity, Wilson 95%, break-even, expectancy R, profit factor, dan drawdown.
 - **Deploy**: Container aktif memakai `PYTHONPATH=/app:/app/src` dan volume persisten `lab_data`; `/api/lab/catalog` mengembalikan HTTP 200.
-- **Verifikasi**: 14/14 tes domain Strategy Lab, 2/2 Playwright desktop/mobile, dan frontend production build lulus. Tidak ada order MT5 dikirim.
+- **Verifikasi**: Cakupan terbaru tercatat pada entri halaman indikator di atas. Tidak ada order MT5 dikirim.
 - **Belum selesai**: histori terminal aktual belum dimasukkan; parity BOSWaves vs TradingView belum dibuktikan; source Pine selain contoh disimpan sebagai unsupported/review; sinyal live dan eksekusi tetap terpisah.
 
 ### 2026-10-04 — Normalisasi huruf timeframe chart

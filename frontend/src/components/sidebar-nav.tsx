@@ -6,6 +6,7 @@ import {
   Layers3,
   LayoutDashboard,
   ScrollText,
+  SlidersHorizontal,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
@@ -14,14 +15,15 @@ import { Separator } from '@/components/ui/separator'
 import { type TerminalAccount } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-export type TabType = 'workspace' | 'activity' | 'risk' | 'fundamental' | 'logs' | 'lab'
+export type TabType = 'workspace' | 'activity' | 'risk' | 'fundamental' | 'logs' | 'indicators' | 'lab'
 
 const navItems = [
   { id: 'workspace', label: 'Trading workspace', icon: LayoutDashboard },
   { id: 'activity', label: 'Sinyal & aktivitas', icon: Activity },
   { id: 'risk', label: 'Anggaran risiko', icon: ShieldCheck },
   { id: 'fundamental', label: 'Konteks pasar', icon: Layers3 },
-  { id: 'lab', label: 'Indikator & strategi', icon: CandlestickChart },
+  { id: 'indicators', label: 'Manajemen indikator', icon: SlidersHorizontal },
+  { id: 'lab', label: 'Strategi & backtest', icon: CandlestickChart },
   { id: 'logs', label: 'Log sistem', icon: ScrollText },
 ]
 

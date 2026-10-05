@@ -81,7 +81,7 @@ def save(db, kind, name, spec, item_id=None, builtin=False, trusted=False):
     item = db.get(LabItem, item_id) if item_id else None
     if item_id and (not item or item.kind != kind):
         raise HTTPException(404, 'Item tidak ditemukan.')
-    if item and (item.builtin or item.archived):
+    if item and ((item.builtin and not trusted) or item.archived):
         raise HTTPException(409, 'Bawaan read-only atau item diarsipkan. Buat duplikat dahulu.')
     if not item:
         item = LabItem(kind=kind, name=name, name_key=name.casefold(), builtin=builtin)
@@ -114,17 +114,16 @@ def save(db, kind, name, spec, item_id=None, builtin=False, trusted=False):
 def seed(db):
     for key, schema in REGISTRY.items():
         name = schema['label']
-        if db.query(LabItem).filter_by(kind='indicators', name_key=name.casefold()).first():
-            continue
+        existing = db.query(LabItem).filter_by(kind='indicators', name_key=name.casefold()).first()
         spec = dict(kind=key, params=parameters(key, {}), status='draft' if key == 'boswaves_core' else 'builtin',
-                    description='Numerical adaptation; source Pine drawing/position lifecycle unsupported. TradingView parity not verified.' if key == 'boswaves_core' else 'Implementasi numerik bawaan.')
+                    description='Adaptasi numerik dan visual ribbon/entry/SL/target; parity TradingView belum diverifikasi pada candle referensi identik.' if key == 'boswaves_core' else 'Implementasi numerik bawaan.')
         if key == 'boswaves_core':
             source = SOURCE_PATH.read_text()
             spec['provenance'] = dict(author='BOSWaves', license='MPL-2.0', source_hash=hashlib.sha256(source.encode()).hexdigest(), translator='manual-numeric-v1')
-        save(db, 'indicators', name, spec, builtin=True, trusted=True)
+        save(db, 'indicators', name, spec, existing.id if existing else None, builtin=True, trusted=True)
 
 
-def import_pine(db, payload):
+def pine_spec(payload):
     source = payload.source.replace('\r\n', '\n')
     blocked = [token for token in ['strategy.', 'lookahead_on', 'request.security', 'line.', 'box.', 'label.', 'array.', 'matrix.', 'import '] if token in source]
     provenance = dict(author=payload.author, license=payload.license, source_url=payload.source_url,
@@ -136,5 +135,18 @@ def import_pine(db, payload):
         if source.strip() != known.strip() or payload.license != 'MPL-2.0':
             raise ValueError('Adaptasi BOSWaves hanya untuk source contoh persis dan lisensi MPL-2.0. Source lain perlu review.')
         spec.update(kind='boswaves_core', params=parameters('boswaves_core', {}), status='draft',
-                    description='Adaptasi numerik: ALMA/deviation/trend flip/risk distance. Gambar Pine, target-hit lifecycle, gradient dan alerts tidak diterjemahkan; belum diverifikasi TradingView.')
-    return save(db, 'indicators', payload.name, spec, trusted=True)
+                    description='Adaptasi numerik dan visual ribbon/entry/SL/target. Target-hit styling dan alerts belum diterjemahkan; parity TradingView belum diverifikasi.')
+    return spec
+
+
+def import_pine(db, payload):
+    return save(db, 'indicators', payload.name, pine_spec(payload), trusted=True)
+
+
+def update_pine(db, item_id, payload):
+    item = db.get(LabItem, item_id)
+    if not item or item.kind != 'indicators':
+        raise HTTPException(404, 'Indikator tidak ditemukan.')
+    if item.builtin or item.archived:
+        raise HTTPException(409, 'Indikator bawaan read-only atau indikator sedang diarsipkan.')
+    return save(db, 'indicators', payload.name, pine_spec(payload), item_id=item.id, trusted=True)

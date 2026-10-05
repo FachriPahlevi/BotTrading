@@ -5,8 +5,8 @@ import {Field,ItemList,Params,selectClass} from './shared'
 import {request,download,type Catalog,type Item,type Instance,type Preview,type Spec} from './api'
 import {LabChart} from './lab-chart'
 
-export function LibraryPanel({catalog,act}: {catalog:Catalog;act:(fn:()=>Promise<unknown>)=>Promise<void>}) {
-  const [kind,setKind]=useState<'indicators'|'strategies'>('indicators')
+export function LibraryPanel({catalog,act,onlyKind}: {catalog:Catalog;act:(fn:()=>Promise<unknown>)=>Promise<void>;onlyKind?:'indicators'|'strategies'}) {
+  const [kind,setKind]=useState<'indicators'|'strategies'>(onlyKind??'indicators')
   const [selected,setSelected]=useState<Item|null>(null)
   const [name,setName]=useState('Indikator saya')
   const [engine,setEngine]=useState('ema')
@@ -24,6 +24,9 @@ export function LibraryPanel({catalog,act}: {catalog:Catalog;act:(fn:()=>Promise
   const [compare,setCompare]=useState('')
   function choose(item:Item) {
     setSelected(item);setName(item.name);setDescription(item.spec.description??'');setEngine(item.spec.kind??'ema');setParams(item.spec.params??{})
+    setSource(item.spec.source??'')
+    setAuthor(item.spec.provenance?.author??'')
+    setLicense(item.spec.provenance?.license??'')
     setInstances(item.spec.indicators??[])
     if(item.kind==='strategies') setRules(JSON.stringify({buy:item.spec.buy,sell:item.spec.sell,stop:item.spec.stop,target_r:item.spec.target_r,assumptions:item.spec.assumptions},null,2))
     setCompare('');setPreview(null)
@@ -38,7 +41,7 @@ export function LibraryPanel({catalog,act}: {catalog:Catalog;act:(fn:()=>Promise
     choose(item)
   }
   return <div className="space-y-5">
-    <div className="flex flex-wrap gap-2">{(['indicators','strategies'] as const).map(k=><Button key={k} variant={kind===k?'secondary':'outline'} onClick={()=>{setKind(k);setSelected(null);setName(k==='indicators'?'Indikator saya':'Strategi saya')}}>{k==='indicators'?'Indikator & script':'Strategi bernama'}</Button>)}</div>
+    {!onlyKind&&<div className="flex flex-wrap gap-2">{(['indicators','strategies'] as const).map(k=><Button key={k} variant={kind===k?'secondary':'outline'} onClick={()=>{setKind(k);setSelected(null);setName(k==='indicators'?'Indikator saya':'Strategi saya')}}>{k==='indicators'?'Indikator & script':'Strategi bernama'}</Button>)}</div>}
     <div className="grid gap-6 xl:grid-cols-[1fr_2fr]">
       <ItemList items={catalog[kind]} onSelect={choose} onArchive={i=>void act(()=>request(`/items/${i.id}/archive`,'POST'))} onClone={i=>void act(async()=>{const copy=await request<Item>(`/items/${i.id}/clone`,'POST',{name:`${i.name.slice(0,65)} salinan ${Date.now().toString().slice(-6)}`,spec:{}});choose(copy)})}/>
       <div className="min-w-0 space-y-4 rounded-lg border border-border p-4">
@@ -50,11 +53,12 @@ export function LibraryPanel({catalog,act}: {catalog:Catalog;act:(fn:()=>Promise
           <Params schema={catalog.schemas[engine]} values={params} onChange={setParams}/>
           {selected?.spec.provenance&&<p className="break-all text-xs text-muted-foreground">{selected.spec.provenance.author} · {selected.spec.provenance.license} · {selected.spec.provenance.source_hash}</p>}
           {selected?.spec.unsupported?.length? <p className="text-xs text-amber-200">Belum diterjemahkan: {selected.spec.unsupported.join(', ')}</p>:null}
-          <details className="space-y-3"><summary className="cursor-pointer text-sm">Impor source Pine</summary><p className="text-xs text-muted-foreground">Source disimpan dengan atribusi. Hanya contoh BOSWaves persis yang memiliki adaptasi numerik draft; gambar/alert Pine belum diterjemahkan. Ini bukan runtime Pine umum.</p>
+          <details className="space-y-3" open={engine==='source_only'}><summary className="cursor-pointer text-sm">Editor Pine Script</summary><p className="text-xs text-muted-foreground">Source dapat diedit dan disimpan sebagai versi baru. Source Pine disimpan untuk review dan tidak dijalankan langsung. Adaptasi numerik perlu implementasi domain yang didukung.</p>
             <Input type="file" accept=".pine,.txt" aria-label="Berkas Pine" onChange={e=>{const f=e.target.files?.[0];if(f) void f.text().then(setSource)}}/>
             <div className="grid grid-cols-2 gap-2"><Field label="Penulis"><Input value={author} onChange={e=>setAuthor(e.target.value)}/></Field><Field label="Lisensi"><Input value={license} onChange={e=>setLicense(e.target.value)}/></Field></div>
+            <Field label={`Source Pine · ${source.split('\n').length} baris`}><textarea aria-label="Source Pine" spellCheck={false} className={`${selectClass} min-h-[420px] resize-y font-mono text-xs leading-relaxed`} value={source} onChange={e=>setSource(e.target.value)} placeholder={'//@version=6\nindicator("Indikator saya")'}/></Field>
             <select aria-label="Mode impor" className={selectClass} value={adaptation} onChange={e=>setAdaptation(e.target.value)}><option value="source_only">Simpan source untuk review</option><option value="boswaves_numeric">Adaptasi numerik contoh BOSWaves (draft)</option></select>
-            <Button disabled={!source} onClick={()=>void act(async()=>choose(await request<Item>('/indicators/import','POST',{name,source,author,license,adaptation})))}>Impor script</Button> <a className="text-xs underline" href="/api/lab/example-source" download>Unduh source contoh berlisensi</a>
+            <Button disabled={!source||!author||!license||!!selected?.builtin} onClick={()=>void act(async()=>choose(await request<Item>(selected?`/indicators/${selected.id}/source`:'/indicators/import',selected?'PUT':'POST',{name,source,author,license,adaptation})))}>{selected?'Simpan versi script':'Impor script'}</Button> <a className="text-xs underline" href="/api/lab/example-source" download>Unduh source contoh berlisensi</a>
           </details>
         </>:<>
           <p className="text-xs text-muted-foreground">Susun instance indikator, lalu referensikan alias.output pada aturan. Maksimal 32 instance per strategi/pratinjau.</p>

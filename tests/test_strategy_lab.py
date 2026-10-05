@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db.session import Base
 from app.lab import datasets, service, jobs
 from app.lab.models import LabRun, LabVersion
-from app.lab.schemas import ImportSource, DatasetInput, RunInput
+from app.lab.schemas import ImportSource, DatasetInput, RunInput, ChartIndicatorsInput
 from app.api import lab
 from trading_agent.lab_indicators import compute, parameters, REGISTRY
 from trading_agent.lab_rules import signals
@@ -97,6 +97,21 @@ class NumericalTests(unittest.TestCase):
         for values in ({'period':True},{'period':float('nan')},{'period':1},{'unknown':2}):
             with self.assertRaises(ValueError): parameters('ema',values)
 
+    def test_boswaves_visual_levels_follow_flip_risk(self):
+        frame=bars(250)
+        out=compute(frame,'boswaves_core',{})
+        self.assertTrue({'alma','mid','edge','edge_glow','entry','stop','target1','target4'} <= set(out))
+        flips=np.flatnonzero((out['bull_flip']==1)|(out['bear_flip']==1))
+        self.assertGreater(len(flips),0)
+        index=int(flips[-1])
+        direction=1 if out['bull_flip'].iloc[index]==1 else -1
+        entry=frame.close.iloc[index]
+        risk=out['risk'].iloc[index]
+        self.assertTrue(np.isnan(out['alma'].iloc[index]))
+        self.assertAlmostEqual(out['entry'].iloc[index],entry)
+        self.assertAlmostEqual(out['stop'].iloc[index],entry-direction*risk)
+        self.assertAlmostEqual(out['target4'].iloc[index],entry+direction*risk*4)
+
     def test_backtest_repeatable_ledger_costs_and_next_open(self):
         frame=bars(500)
         first=run_research_backtest(frame,config(),settings())
@@ -151,6 +166,20 @@ class ManagementTests(DatasetTests):
         item=service.import_pine(self.db,ImportSource(name='Unknown',source='request.security(foo)',author='Test',license='MPL-2.0'))
         with self.assertRaises(ValueError):service.resolve_instances(self.db,[dict(alias='x',version_id=item['version_id'],params={})])
         with self.assertRaises(ValueError):service.save(self.db,'indicators','Forged',dict(kind='ema',params={},status='verified'))
+
+    def test_editable_source_creates_version_and_dashboard_calculation_uses_shared_engine(self):
+        item=service.import_pine(self.db,ImportSource(name='Editable',source='//@version=6\nindicator("One")',author='Test',license='MPL-2.0'))
+        edited=service.update_pine(self.db,item['id'],ImportSource(name='Editable',source='//@version=6\nindicator("Two")',author='Test',license='MPL-2.0'))
+        self.assertEqual(edited['version'],2)
+        self.assertIn('Two',edited['spec']['source'])
+        self.assertIn('One',self.db.get(LabVersion,item['version_id']).spec['source'])
+        catalog=lab.catalog(self.db)
+        sma=next(value for value in catalog['indicators'] if value['spec']['kind']=='sma')
+        payload=ChartIndicatorsInput(symbol='TEST',interval='1m',candles=bars(80).to_dict('records'),indicators=[dict(alias='trend',version_id=sma['version_id'],params={'period':5})])
+        result=lab.calculate_chart_indicators(payload,self.db)
+        self.assertTrue(result['ready'])
+        self.assertEqual(len(result['lines']['trend.value']),80)
+        self.assertTrue(all(value is None for value in result['lines']['trend.value'][:4]))
 
     def test_dataset_merge_strategy_pin_holdout_and_recovery(self):
         payload=DatasetInput(name='History',broker='Test',server='Test-Demo',symbol='TEST',csv=bars(120).to_csv(index=False))
