@@ -2,7 +2,7 @@
 #property version "1.3"
 
 input string ApiUrl = "http://127.0.0.1:8000/api/mt5/candles";
-input int CandleCount = 160;
+input int CandleCount = 500; // Jumlah candle per timeframe (dinaikkan dari 160 untuk akurasi indikator & warm-up)
 input int RequestTimeoutMs = 2000;
 // Empty means derive /api/mt5/account from the existing candle URL.
 input string AccountApiUrl = "";

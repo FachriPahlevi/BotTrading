@@ -90,7 +90,7 @@ def disconnect_mt5():
 
 
 @app.get("/chart")
-def chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 160):
+def chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 800):
     symbol = symbol.strip()
     interval = interval.strip().lower()
     if interval not in TIMEFRAMES:
@@ -109,7 +109,7 @@ def chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 160):
     if not selected:
         raise HTTPException(status_code=404, detail=f"Symbol {symbol} is unavailable in HFM MT5")
 
-    rates = mt5.copy_rates_from_pos(selected, TIMEFRAMES[interval], 0, max(60, min(limit, 500)))
+    rates = mt5.copy_rates_from_pos(selected, TIMEFRAMES[interval], 0, max(60, min(limit, 1000)))
     if rates is None or len(rates) == 0:
         raise HTTPException(status_code=502, detail=f"No rates received: {mt5.last_error()}")
 

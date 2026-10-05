@@ -2,6 +2,12 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
@@ -14,11 +20,15 @@ from app.api.endpoints import router as api_router
 from app.api.account import router as account_router
 from app.api.diagnostics import router as diagnostics_router
 from app.api.lab import router as lab_router
+from app.api.trade import router as trade_router
+from app.api.autopilot import router as autopilot_router
+from app.api.finance import router as finance_router
 from app.lab import jobs as lab_jobs
 from app.db.session import SessionLocal
 from app.diagnostics import DiagnosticMiddleware, record
 from app.core.config import settings
 from app.db.session import Base, engine
+from app.models.trading import TradeRecord  # noqa: F401
 
 STATIC_DIR = Path(__file__).parent / "static"
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
@@ -98,3 +108,7 @@ app.include_router(api_router, prefix="/api")
 app.include_router(account_router, prefix="/api")
 app.include_router(diagnostics_router, prefix="/api")
 app.include_router(lab_router, prefix="/api")
+app.include_router(trade_router, prefix="/api")
+app.include_router(autopilot_router, prefix="/api")
+app.include_router(finance_router, prefix="/api")
+

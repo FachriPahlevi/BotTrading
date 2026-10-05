@@ -64,11 +64,26 @@ def validate_spec(db, kind, spec):
         validate_rules(normalized)
         return normalized
     if kind == 'indicators':
-        if set(spec)-{'kind', 'params', 'description'}:
-            raise ValueError('Gunakan importer untuk source dan provenance; status verified tidak dapat disetel manual.')
-        engine = spec.get('kind')
-        return dict(kind=engine, params=parameters(engine, spec.get('params', {})),
+        if spec.get('status') == 'verified':
+            raise ValueError('Status verified tidak dapat disetel manual.')
+        allowed = {'kind', 'params', 'description', 'source', 'provenance', 'unsupported'}
+        if set(spec) - allowed - {'status'}:
+            extra = set(spec) - allowed - {'status'}
+            raise ValueError(f'Field tidak didukung: {", ".join(extra)}')
+        engine = spec.get('kind', 'ema')
+        res = dict(kind=engine, params=parameters(engine, spec.get('params', {})) if engine in REGISTRY else spec.get('params', {}),
                     description=str(spec.get('description', ''))[:2000], status='draft')
+        if 'source' in spec and spec['source'] is not None:
+            res['source'] = str(spec['source'])[:150000]
+            if 'provenance' in spec and spec['provenance']:
+                res['provenance'] = spec['provenance']
+            else:
+                res['provenance'] = dict(author='User', license='Custom', source_hash=hashlib.sha256(res['source'].encode()).hexdigest(), translator='pine-editor')
+        elif 'provenance' in spec and spec['provenance']:
+            res['provenance'] = spec['provenance']
+        if 'unsupported' in spec and spec['unsupported']:
+            res['unsupported'] = spec['unsupported']
+        return res
     raise HTTPException(400, 'Jenis item tidak didukung.')
 
 
@@ -95,7 +110,7 @@ def save(db, kind, name, spec, item_id=None, builtin=False, trusted=False):
         latest = db.query(LabVersion).filter_by(item_id=item.id).order_by(LabVersion.number.desc()).first()
         if latest and kind == 'indicators' and not trusted:
             for key in ('source', 'provenance', 'unsupported'):
-                if key in latest.spec:
+                if key in latest.spec and key not in spec:
                     spec[key] = latest.spec[key]
         config_hash = digest(spec)
         if latest and latest.config_hash == config_hash:
@@ -114,12 +129,22 @@ def save(db, kind, name, spec, item_id=None, builtin=False, trusted=False):
 def seed(db):
     for key, schema in REGISTRY.items():
         name = schema['label']
-        if db.query(LabItem).filter_by(kind='indicators', name_key=name.casefold()).first():
+        existing = db.query(LabItem).filter_by(kind='indicators', name_key=name.casefold()).first()
+        if existing:
+            if key == 'boswaves_core':
+                latest = db.query(LabVersion).filter_by(item_id=existing.id).order_by(LabVersion.number.desc()).first()
+                if latest and (not latest.spec.get('source') or len(latest.spec.get('source', '')) < 50):
+                    source = SOURCE_PATH.read_text(encoding='utf-8')
+                    spec = dict(latest.spec)
+                    spec['source'] = source
+                    latest.spec = spec
+                    db.commit()
             continue
         spec = dict(kind=key, params=parameters(key, {}), status='draft' if key == 'boswaves_core' else 'builtin',
                     description='Numerical adaptation; source Pine drawing/position lifecycle unsupported. TradingView parity not verified.' if key == 'boswaves_core' else 'Implementasi numerik bawaan.')
         if key == 'boswaves_core':
-            source = SOURCE_PATH.read_text()
+            source = SOURCE_PATH.read_text(encoding='utf-8')
+            spec['source'] = source
             spec['provenance'] = dict(author='BOSWaves', license='MPL-2.0', source_hash=hashlib.sha256(source.encode()).hexdigest(), translator='manual-numeric-v1')
         save(db, 'indicators', name, spec, builtin=True, trusted=True)
 
@@ -132,7 +157,7 @@ def import_pine(db, payload):
     spec = dict(kind='source_only', params={}, status='unsupported', source=source, provenance=provenance,
                 unsupported=blocked, description='Source disimpan untuk review; Pine tidak dieksekusi. Tidak ada penerjemah umum otomatis.')
     if payload.adaptation == 'boswaves_numeric':
-        known = SOURCE_PATH.read_text().replace('\r\n', '\n')
+        known = SOURCE_PATH.read_text(encoding='utf-8').replace('\r\n', '\n')
         if source.strip() != known.strip() or payload.license != 'MPL-2.0':
             raise ValueError('Adaptasi BOSWaves hanya untuk source contoh persis dan lisensi MPL-2.0. Source lain perlu review.')
         spec.update(kind='boswaves_core', params=parameters('boswaves_core', {}), status='draft',

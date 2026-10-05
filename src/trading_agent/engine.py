@@ -55,6 +55,12 @@ class TradingEngineWorker:
             self._lock_file.write(str(os.getpid()))
             self._lock_file.flush()
         except (IOError, OSError) as e:
+            if self._lock_file:
+                try:
+                    self._lock_file.close()
+                except Exception:
+                    pass
+                self._lock_file = None
             raise ProcessLockError(f"Another trading worker process is already running: {e}")
 
     def release_process_lock(self):

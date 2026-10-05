@@ -114,7 +114,7 @@ def receive_mt5_candles(payload: dict):
 
 
 @router.get("/market/chart")
-def get_market_chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 160):
+def get_market_chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 500):
     """Proxy XAUUSD / XAUUSDm candles from a local bridge connected to MetaTrader 5."""
     symbol = symbol.strip()
     interval = interval.strip().lower()
@@ -124,7 +124,7 @@ def get_market_chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int =
     if interval not in allowed_intervals:
         raise HTTPException(status_code=400, detail="Unsupported interval")
 
-    limit = max(60, min(limit, 500))
+    limit = max(60, min(limit, 1000))
     bridge_url = os.getenv("MT5_BRIDGE_URL", "").rstrip("/")
     if not bridge_url:
         sym_upper = symbol.upper()

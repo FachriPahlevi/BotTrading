@@ -4,13 +4,18 @@ Catatan kelanjutan sesi. Aturan kerja berada di [AGENTS.md](AGENTS.md), fakta te
 
 ## Current Handoff
 
-- **Permintaan aktif**: Implementasi Strategy Lab dan perbaikan query timeframe chart yang terkirim sebagai `1H`.
-- **Status**: Manajemen indikator/strategi dan backtest research sudah tersedia dan aktif pada container. Pekerjaan lanjutan masih dibutuhkan untuk impor histori terminal aktual, verifikasi parity TradingView, serta apply ke shadow/PAPER/DEMO.
-- **Lokasi**: `frontend/src/hooks/useMarketData.ts`, `frontend/src/hooks/useAiAnalysis.ts`, `app/api/endpoints.py`, `mt5_bridge.py`, serta modul `app/lab/` dan `frontend/src/components/lab/`.
-- **Hasil Verifikasi terbaru**: Build frontend lulus; domain Strategy Lab 14/14 dan UI Lab desktop/mobile 2/2 lulus; `/api/lab/catalog` aktif dengan 7 indikator bawaan; volume `lab_data` terpasang dan writable. Normalisasi interval juga lulus 4/4 tes ingest dan request aktual `1H` merespons HTTP 200.
-
-
-- **Langkah berikutnya**: Impor histori XAUUSDm M1 dari terminal aktual, buat timeframe turunan, lalu verifikasi adaptasi BOSWaves terhadap ekspor referensi sebelum menilai hasil backtest.
+- **Permintaan aktif**: Script BOSWaves tidak muncul di antarmuka Manajemen Indikator (hanya komentar 1 baris).
+- **Status**: Selesai diperbaiki dan diverifikasi. Backend `seed()` kini menyimpan seluruh 776 baris Pine script v6 ke dalam `spec['source']`, dan frontend otomatis memuat script lengkap via API jika belum tersimpan.
+- **Lokasi**:
+  - Backend Seed: [app/lab/service.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/app/lab/service.py).
+  - Studio UI: [frontend/src/components/lab/tradingview-indicator-studio.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/lab/tradingview-indicator-studio.tsx).
+  - Pine Editor: [frontend/src/components/lab/pine-editor.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/lab/pine-editor.tsx).
+  - API Client: [frontend/src/components/lab/api.ts](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/lab/api.ts).
+- **Hasil Verifikasi terbaru**:
+  - 64/64 unittest Python lulus (100% OK).
+  - Playwright E2E test `tests/lab.spec.ts` lulus 2/2 (4.5s).
+  - Frontend Vite build lulus tanpa error (`built in 767ms`).
+- **Langkah berikutnya**: Pengguna yang membuka menu "Manajemen Indikator" akan langsung melihat indikator BOSWaves lengkap dengan 776 baris Pine Script v6 di Pine Editor, atau dapat memuatnya dari dropdown template kapan saja.
 
 ## Aturan pencatatan
 
@@ -18,7 +23,286 @@ Perbarui Current Handoff dan tambahkan entri setelah pekerjaan bermakna. Catat p
 
 ## Task Entries
 
-### 2026-10-04 — Strategy Lab: manajemen indikator, strategi, dataset, dan backtest
+### 2026-10-05 — Perbaikan Script BOSWaves di Manajemen Indikator & Pine Editor
+
+- **Permintaan**: Script BOSWaves sudah ada di sistem (`app/lab/sources/trend_target_ribbon.pine`), tetapi di halaman Manajemen Indikator kodenya tidak muncul.
+- **Akar Masalah**:
+  1. Pada `app/lab/service.py`, fungsi `seed()` membaca `SOURCE_PATH` dan menghitung hash SHA-256 untuk `provenance`, namun lupa memasukkan `spec['source'] = source`. Akibatnya indikator bawaan BOSWaves di database tersimpan dengan `source: null`.
+  2. Pada frontend (`tradingview-indicator-studio.tsx` & `library-panel.tsx`), fallback kode saat `item.spec.source` bernilai `null` hanya berupa string komentar 1 baris `// BOSWaves numerical draft adaptation source`.
+- **Implementasi Perbaikan**:
+  - `app/lab/service.py`:
+    - Mengisi `spec['source'] = source` saat membuat indikator bawaan BOSWaves.
+    - Menambahkan mekanisme auto-update pada `seed(db)`: jika item `boswaves_core` sudah ada di database namun `source`-nya kosong atau terpotong, otomatis diisi dengan kode sumber lengkap 776 baris dari file `.pine`.
+  - `frontend/src/components/lab/api.ts`:
+    - Menambahkan helper `requestText(path: string)` untuk mengambil respon raw text dari endpoint `/api/lab/example-source`.
+  - `frontend/src/components/lab/tradingview-indicator-studio.tsx`:
+    - Fungsi `choose(item)` sekarang secara cerdas memeriksa: jika item bertipe `boswaves_core` dan `source`-nya belum ada, ia akan otomatis mengambil kode sumber lengkap dari `/example-source`.
+    - Inisialisasi awal pada `useEffect` memprioritaskan indikator BOSWaves agar pengguna langsung disambut dengan script BOSWaves di Pine Editor.
+  - `frontend/src/components/lab/pine-editor.tsx`:
+    - Menambahkan preset template **BOSWaves Trend Target Ribbon (Pine v6)** di dropdown template Pine Editor, sehingga pengguna bisa memuat ulang script BOSWaves secara instan kapan saja.
+- **Verifikasi**:
+  - 64/64 pengujian unit Python lulus (`Ran 64 tests in 2.435s — OK`).
+  - Playwright test `tests/lab.spec.ts` lulus 2/2 (Desktop & Mobile).
+  - Bundle frontend Vite berhasil di-compile tanpa error tipe TypeScript (`built in 767ms`).
+
+### 2026-10-05 — Integrasi Penuh TradingView Indicator Studio ke Lab Panel
+
+- **Permintaan**: Integrasikan pengalaman TradingView yang sesungguhnya ke halaman Manajemen Indikator agar identik dengan TradingView.
+- **Implementasi**:
+  - `frontend/src/components/lab/lab-panel.tsx`:
+    - Mengganti pemanggilan `LibraryPanel` pada mode `indicators` menjadi `<TradingViewIndicatorStudio catalog={query.data} act={act} />`.
+    - Menghadirkan alur kerja otentik TradingView:
+      1. **Top Bar & View Switcher**: Tombol cepat `[Grafik Chart]` | `[Pine Editor]` | `[Pengaturan Inputs]`, tombol `[Perpustakaan Indikator]`, tombol `[Script Baru]`, dan `[Impor .pine]`.
+      2. **Interactive Chart Legend**: Strip indikator aktif dengan tombol `Eye` (toggle visibility), `Sliders` (buka dialog pengaturan parameter), `Code2` (buka source code di Pine Editor), dan `CopyPlus` (duplikat indikator).
+      3. **Modal Perpustakaan Indikator ("Indicators, Metrics & Strategies")**: Kategori Technicals bawaan, My Scripts (skrip Pine kustom), Favorit (disimpan ke localStorage), pencarian instan, dan aksi pasang ke chart/buka editor.
+      4. **Modal Pengaturan Indikator (⚙️ TradingView Settings Dialog)**: Tab Inputs (stepper/number tanpa kode), Style (warna dan ketebalan garis), dan Info (Author & License).
+      5. **Pine Script Editor**: Editor kode bernomor baris, tema gelap, indentasi tab 2 spasi, template bawaan, tombol simpan, download `.pine`, dan compiler status.
+- **Verifikasi**:
+  - 64/64 pengujian unit Python lulus (`Ran 64 tests in 2.500s — OK`).
+  - Playwright test `tests/lab.spec.ts` lulus 2/2 (Desktop & Mobile).
+  - Bundle frontend Vite berhasil di-compile tanpa error tipe TypeScript (`built in 763ms`).
+
+### 2026-10-05 — Penghapusan Data Historis, Strategi Trading, & Backtest dari Halaman Manajemen Indikator
+
+- **Permintaan**: Hapus data historis, strategi trading, dan backtest dari halaman manajemen indikator.
+- **Implementasi**:
+  - `frontend/src/components/lab/lab-panel.tsx`:
+    - Menambahkan dukungan `mode?: 'indicators' | 'strategies' | 'lab' | 'full'`.
+    - Saat `mode === 'indicators'` (halaman Manajemen Indikator):
+      - Menghapus seluruh tombol tab navigasi atas (`1. Data historis`, `3. Strategi Trading`, `4. Backtest & Evaluasi`).
+      - Menyajikan header mandiri: **TradingView Studio — Manajemen Indikator** ("Katalog indikator teknikal, interface pengaturan parameter, dan Pine Script Editor bawaan").
+      - Menghubungkan langsung ke `<LibraryPanel forcedKind="indicators" hideDataset={true} />`.
+  - `frontend/src/components/lab/library-panel.tsx`:
+    - Menambahkan properti `hideDataset?: boolean`.
+    - Saat aktif, bagian pratinjau dataset research M1/H1 dan histori dihapus dari bawah form, sehingga halaman 100% bebas dari dependensi data historis research.
+  - `frontend/src/App.tsx`:
+    - Mengatur routing `activeTab === 'indicators'` agar secara eksplisit merender `<LabPanel mode="indicators" />`.
+    - Mengatur routing `activeTab === 'strategies'` agar merender `<LabPanel mode="strategies" />`.
+    - Mengatur routing `activeTab === 'lab'` agar merender `<LabPanel mode="full" />` (untuk keperluan riset dataset histori & pengujian backtest massal).
+  - **Verifikasi**:
+    - 64/64 pengujian unit Python lulus (`Ran 64 tests in 2.761s — OK`).
+    - Playwright test `tests/lab.spec.ts` lulus 2/2 (Desktop & Mobile).
+    - Bundle frontend Vite berhasil di-compile tanpa error tipe TypeScript (`built in 778ms`).
+
+### 2026-10-05 — Manajemen Indikator Ala TradingView: Pine Script Editor, Interface Inputs Mode, & Impor Instan
+
+- **Permintaan**:
+  - Manajemen indikator dibuat sesimpel milik TradingView:
+    1. Bisa impor script (.pine / .txt / .json atau paste langsung).
+    2. Bisa edit untuk pengguna secara interface (formulir inputs, sliders/stepper tanpa menyentuh kode).
+    3. Dilengkapi Pine Editor sesungguhnya (nomor baris, dark theme, tab indent, template, compiler status, download, dan tombol simpan).
+- **Implementasi**:
+  - **Backend Support (`app/lab/service.py`)**:
+    - Memperbarui `validate_spec` dan `save` agar mendukung penyimpanan dan pembaruan `source` (Pine Script) dan `provenance` (Author, License, SHA hash) secara langsung dari editor atau formulir, sambil tetap mengamankan status sistem (`status='verified'` tidak dapat dipalsukan secara manual).
+  - **Komponen Pine Editor (`frontend/src/components/lab/pine-editor.tsx`)**:
+    - Editor kode bertema TradingView/VSCode dark (`#0a0e14`).
+    - Penomoran baris dinamis (line numbers gutter) dengan scroll synchronizer.
+    - Dukungan keyboard: Tombol Tab menambahkan 2 spasi indent alih-alih memindahkan fokus.
+    - Preset template cepat:
+      - *Indikator Kosong (Pine v5)*
+      - *Trend Moving Average Ribbon*
+      - *RSI Momentum Oscillator*
+      - *Bollinger Bands Volatility*
+    - Tombol aksi cepat: Impor berkas `.pine`/`.txt`, Salin script ke clipboard, Unduh file `.pine`, Beralih ke Interface Inputs, dan Simpan Script.
+    - Status bar: Deteksi versi Pine (`v5`), penghitung baris & karakter, status compiler.
+  - **Mode Interface Formulir Pengguna (`frontend/src/components/lab/indicator-settings-dialog.tsx` & `library-panel.tsx`)**:
+    - Mode formulir intuitif ala TradingView Settings:
+      - Tab **Input Parameter**: Input angka/stepper untuk setiap parameter skema teknikal (`period`, `multiplier`, `source`, dll.) dengan petunjuk min, max, default.
+      - Tab **Mesin & Output**: Pilihan formula algoritma (`ema`, `sma`, `rsi`, `alma`, `bollinger`, `atr`, `boswaves_core`).
+      - Tab **Info & Script**: Deskripsi, penulis, lisensi, SHA hash integritas, dan tombol loncat ke Pine Editor.
+  - **Katalog Indikator Interaktif (`frontend/src/components/lab/library-panel.tsx` & `shared.tsx`)**:
+    - Input pencarian indikator secara instan.
+    - Filter kategori: **Semua**, **🌟 Bawaan**, dan **📜 Kustom**.
+    - Tombol cepat pada setiap card indikator: Klik untuk memilih/edit parameter interface, tombol **Pine** untuk membuka langsung di Pine Editor, tombol **Duplikat**, dan tombol **Arsip**.
+    - Tombol switch tab atas untuk beralih instan antara **Interface Inputs** dan **Pine Editor**.
+  - **Verifikasi**:
+    - 64/64 pengujian unit Python lulus (`Ran 64 tests in 2.247s — OK`).
+    - Playwright E2E test `tests/lab.spec.ts` lulus 2/2 (Desktop & Mobile).
+    - `npm run build` lulus tanpa error dalam 744ms.
+
+### 2026-10-05 — Floating Profit/Loss Transaksi Terbuka, Partial Close (Tutup Separuh), Fitur Auto Close All, & Pemisahan Mandiri Indikator vs Strategi
+
+- **Permintaan**:
+  1. Pada bagian transaksi terbuka: tampilkan kerugian/profit (floating PnL), sediakan pengaturan untuk tutup separuh (partial close) atau tutup semua, serta tambahkan fitur auto close semua transaksi.
+  2. Pisahkan manajemen indikator sendiri dan strategi sendiri.
+- **Implementasi**:
+  - **Floating Profit/Loss, Partial Close, dan Auto Close All**:
+    - `app/api/trade.py`:
+      - Menambahkan kalkulasi floating profit, `current_price`, `entry_price`, `magic`, `comment`, dan atribut `source` (`"ai"` vs `"manual"`) pada endpoint `GET /api/trade/positions`.
+      - Memperbarui `POST /api/trade/positions/{ticket}/close` untuk menerima parameter opsional `ClosePositionPayload(volume?: float)`. Jika volume yang diminta lebih kecil dari volume tiket, mengeksekusi penutupan parsial MT5 (`is_partial=True`), menjaga sisa lot tetap aktif.
+      - Menambahkan endpoint `POST /api/trade/positions/close-all` untuk menutup seluruh posisi terbuka sekaligus dalam satu kali request rekonsiliasi.
+    - `frontend/src/types/trade.ts` & `frontend/src/hooks/useTrade.ts`:
+      - Menambahkan definisi tipe dan mutasi React Query untuk penutupan parsial/penuh dan penutupan darurat `closeAllPositions()`, dengan auto-invalidasi data akun, posisi, dan keuangan.
+    - `frontend/src/components/trade-panel.tsx`:
+      - Menampilkan badge floating PnL jelas pada setiap item tiket posisi berjalan (`+$XX.XX` hijau emerald / `-$XX.XX` merah rose).
+      - Tombol aksi per transaksi: **Tutup 50%** (parsial setengah lot) dan **Tutup Semua** (penuh).
+      - Header panel dilengkapi total akumulasi floating profit aktif beserta tombol darurat **🚨 Tutup Semua (Close All)**.
+      - Panel Proteksi **Auto Close Protection**: Pengguna dapat menyetel Target Profit ($) dan Max Loss Cut ($). Saat total floating profit/loss menyentuh batas tersebut, sistem secara otomatis mengeksekusi penutupan seluruh posisi terbuka dan menonaktifkan trigger untuk mencegah double-execution.
+  - **Pemisahan Modul Mandiri: Manajemen Indikator vs Strategi Trading**:
+    - `frontend/src/components/lab/library-panel.tsx`:
+      - Menambahkan properti `forcedKind?: 'indicators' | 'strategies'`.
+      - Mode `indicators`: Menampilkan antarmuka khusus Manajemen Indikator (koleksi rumus teknikal EMA/SMA/RSI/ALMA/BOSWaves, editor parameter, impor source Pine Script, metadata lisensi/atribusi, dan pratinjau chart historis).
+      - Mode `strategies`: Menampilkan antarmuka khusus Manajemen Strategi (koleksi strategi bernama, perakit multi-indikator hingga 32 instance, editor aturan deklaratif Buy/Sell Crossover/Crossunder, Stop Loss, Target R, template BOSWaves draft, dan ekspor/impor konfigurasi).
+    - `frontend/src/components/lab/lab-panel.tsx`:
+      - Memisahkan tab Strategy Lab menjadi 4 bagian eksplisit:
+        1. `1. Data historis`
+        2. `2. Manajemen Indikator`
+        3. `3. Strategi Trading`
+        4. `4. Backtest & Evaluasi`
+    - `frontend/src/components/sidebar-nav.tsx` & `frontend/src/App.tsx`:
+      - Menambahkan navigasi terpisah di sidebar:
+        - **Manajemen Indikator** (icon `SlidersHorizontal`)
+        - **Strategi Trading** (icon `Sparkles`)
+        - **Strategy Lab (Backtest)** (icon `CandlestickChart`)
+      - Routing langsung di `App.tsx` merender modul yang sesuai dengan `initialTab` spesifik.
+  - **Verifikasi**:
+    - 64/64 pengujian unit Python lulus (`Ran 64 tests in 2.933s — OK`).
+    - Pengujian Playwright E2E `tests/lab.spec.ts` lulus 2/2 (Desktop & Mobile).
+    - Bundle frontend Vite berhasil di-compile tanpa error tipe TypeScript (`built in 790ms`).
+
+### 2026-10-05 — Hapus Anggaran Risiko, Halaman Mandiri Laporan Keuangan, & Canvas TradingView-Grade
+
+- **Permintaan**:
+  1. Hapus anggaran risiko di dashboard trading workspace.
+  2. Pindahkan filter keuangan dan rincian analitik ke halaman/tab baru mandiri agar dashboard utama bersih.
+  3. Tingkatkan canvas candle agar leluasa dikustomisasi persis seperti TradingView.
+- **Implementasi**:
+  - **Hapus Anggaran Risiko**:
+    - `frontend/src/App.tsx`: Menghapus komponen `RiskCalculator` dari kolom kanan trading workspace dan dari tab aktif.
+    - `frontend/src/components/sidebar-nav.tsx`: Mengganti tab `risk` (Anggaran risiko) dengan `finance` (Laporan Keuangan dengan icon `TrendingUp`).
+  - **Halaman Baru Laporan Keuangan (`FinancePage`)**:
+    - `frontend/src/components/finance-page.tsx`: Halaman mandiri komprehensif untuk manajemen keuangan trading:
+      - Filter Periode: **Harian (Hari Ini)**, **Mingguan (7 Hari)**, **Bulanan (30 Hari)**, **Tahunan (Tahun Ini)**, dan **Kustom 📅** dengan date range picker serta tombol preset instan (7, 14, 30, 90 hari).
+      - Primary KPI Cards: Net Profit (dengan highlighting dinamis hijau/merah), Win Rate %, Profit Factor, dan Total Deals Selesai.
+      - Perbandingan Performa AI vs Manual: Komparasi langsung Net PnL, total transaksi, dan efisiensi antara AI Autopilot Agent (Magic #889900) vs Trading Manual pengguna.
+      - Riwayat Transaksi Tertutup: Tabel komprehensif deals MT5 dengan input pencarian (simbol/tiket), filter sumber (`Semua`, `🤖 AI`, `👤 Manual`), badge, volume lot, harga tutup, dan profit/loss.
+      - Transaksi Belum Dieksekusi: Tabel pending orders (Stop & Limit) yang menunggu trigger harga.
+    - `frontend/src/components/account-panel.tsx`: Panel header pada workspace trading disederhanakan menjadi 5 kartu ramping (Saldo, Equity, Profit Berjalan, Transaksi Berjalan dengan rincian AI vs Manual, dan Belum Dieksekusi), dilengkapi tombol langsung menuju halaman laporan keuangan.
+  - **Peningkatan Canvas Candle TradingView-Grade**:
+    - `frontend/src/components/market-chart.tsx`:
+      - **Toolbar Atas TradingView**: Quick timeframe pills (`1m`, `5m`, `15m`, `1h`, `4h`, `1d`), dropdown pemilihan tipe candle (Solid Candlestick, Hollow Candle, OHLC Bar, Area Mountain Line).
+      - **Koleksi Indikator**: Menu dropdown indikator teknikal overlay (`MA`, `EMA`, `BOLL`, `SAR`) dan osilator (`VOL`, `MACD`, `RSI`, `KDJ`, `WR`, `CCI`).
+      - **Alat Gambar Lengkap**: Trendline (`segment`), Garis Horizontal (`horizontalStraightLine`), Sinar Horizontal (`horizontalRayLine`), Garis Vertikal (`verticalStraightLine`), Fibonacci Retracement (`fibonacciLine`), Kanal Tren Paralel (`parallelStraightLine`), Zona Harga Kotak (`priceZone`), Kuas Gambar Bebas (`brush`), Catatan Teks (`simpleAnnotation`), dan tombol hapus semua gambar.
+      - **Modal Pengaturan / Kustomisasi (Settings ⚙️)**:
+        - 5 Tema Warna Candle: *TradingView Emerald & Rose*, *Classic Neon*, *Cyberpunk Cyan & Magenta*, *Modern Blue & Orange*, dan *Monochrome Pro*.
+        - Toggle Grid Horizontal & Vertikal (On / Off).
+        - Toggle Garis Harga Pasar Terakhir (On / Off).
+      - **Fitur Pro**: Tombol zoom in/out, pengaturan ketebalan candle / bar space (`-` dan `+`), reset view (↺), pengambilan foto chart / screenshot JPG (`Camera`), dan mode layar penuh (*Fullscreen* ⛶).
+- **Verifikasi**:
+  - 64/64 unit test Python lulus 100% (`Ran 64 tests in 2.938s — OK`).
+  - Build Vite frontend lulus (`built in 677ms`).
+
+
+### 2026-10-05 — Penggantian Kartu Margin & Dashboard Kinerja Keuangan (Harian, Mingguan, Bulanan, Tahunan, Kustom)
+
+- **Permintaan**: Mengganti kartu Margin Bebas & Margin Terpakai dengan "Transaksi Berjalan" (posisi aktif yang sedang floating) dan "Belum Dieksekusi / Pending" (stop/limit orders); serta menambahkan dashboard kinerja keuangan dengan filter waktu: Harian, Mingguan, Bulanan, Tahunan, dan Kustom (date range picker) untuk membantu manajemen keuangan trading.
+- **Implementasi**:
+  - `app/api/finance.py`: Router baru FastAPI (`/api/finance`) dengan endpoint:
+    - `GET /api/finance/overview`: Menghitung metrik performa dari riwayat deals riil terminal MT5 (`mt5.history_deals_get`), menyaring transaksi penutup (`entry in (1, 2)` / OUT deals), menghitung Net Profit, Gross Profit, Gross Loss, Profit Factor, Win Rate, Total Trades, dan rincian transaksi closed deals. Mendukung filter periode `daily`, `weekly`, `monthly`, `yearly`, dan `custom` dengan `start_date` & `end_date`.
+    - `GET /api/finance/pending-orders`: Mengambil order yang belum tereksekusi (`mt5.orders_get`) seperti Buy/Sell Limit, Buy/Sell Stop, Stop Limit dengan harga target dan volume.
+  - `app/main.py`: Me-mount router finance ke aplikasi utama.
+  - `tests/test_finance.py`: Pengujian unit komprehensif untuk perhitungan metrik keuangan dan filter periode (3 test cases lulus).
+  - `frontend/src/types/finance.ts` & `frontend/src/hooks/useFinance.ts`: Interface TypeScript dan React hook untuk query performa keuangan dan pending orders dengan auto-refresh setiap 5 detik.
+  - `app/models/trading.py`: Model SQLAlchemy baru `TradeRecord` untuk menyimpan riwayat transaksi secara persisten di database SQLite (`ai_trading.db`), mencakup tiket, order_id, simbol, action (BUY/SELL), lot, harga, SL, TP, profit, source (`manual` atau `ai`), magic number, dan komentar.
+  - `app/api/finance.py`:
+    - Menambahkan klasifikasi sumber transaksi: mendeteksi magic `889900` atau komentar `AI` sebagai `source="ai"`, sedangkan magic `998877` atau `0` (terminal MT5 desktop/mobile) sebagai `source="manual"`.
+    - Sinkronisasi otomatis deals MT5 ke tabel `trade_records` di SQLite lokal (`_save_deals_to_sqlite`).
+    - Menghitung breakdown performa terpisah: `ai_profit`, `manual_profit`, `ai_trades_count`, `manual_trades_count`, `active_ai_positions`, `active_manual_positions`.
+  - `app/api/trade.py`: Menyimpan order yang berhasil dieksekusi secara instan ke tabel `trade_records`.
+  - `frontend/src/components/account-panel.tsx`:
+    - Mengganti kartu ke-4 menjadi **Transaksi Berjalan** (menampilkan jumlah posisi aktif, total lot volume, floating PnL, dan rincian AI vs Manual).
+    - Mengganti kartu ke-5 menjadi **Belum Dieksekusi** (menampilkan jumlah order pending limit/stop dengan badge indikator).
+    - Menambahkan bar navigasi Filter Periode: **Harian**, **Mingguan**, **Bulanan**, **Tahunan**, dan **Kustom 📅** dengan input tanggal interaktif (Dari - Sampai).
+    - Menambahkan Dashboard Ringkasan Finansial: Net Profit (dengan warna dinamis hijau/merah), Win Rate %, Rasio Profit Factor, dan Total Transaksi.
+    - Menambahkan Riwayat Transaksi Selesai (Closed Deals History) dengan badge pembeda **[🤖 AI]** dan **[👤 Manual]**, serta filter pill cepat: **Semua**, **🤖 AI**, **👤 Manual**.
+  - Resolusi IDE Diagnostics: Memperbaiki type hint `**identity` di `app/api/lab.py` dan menambahkan file `.pth` & `pyrightconfig.json` untuk resolusi modul virtual environment.
+- **Verifikasi**:
+  - 64/64 unit test Python lulus 100% (`Ran 64 tests in 2.590s — OK`).
+  - Build Vite frontend lulus (`built in 757ms`).
+
+### 2026-10-05 — Implementasi Dedicated Card AI Trading Agent (Autopilot dengan Target Profit)
+
+- **Permintaan**: Memisahkan fungsi analisis dan eksekusi AI ke card berbeda; AI Analyst Card hanya menampilkan perspektif analisis teknikal & visual overlay chart; membuat card khusus AI Trading Agent yang mengeksekusi siklus trading multi-transaksi secara otonom (buka/tutup posisi) secara berkelanjutan sampai target profit tercapai (contoh: $1000 atau 100%).
+- **Implementasi**:
+  - `app/engines/ai_autopilot.py`: Engine background otonom (`AiAutopilotEngine`) yang melacak `target_profit`, `max_loss`, saldo awal, realized & unrealized PnL, progress bar persentase target, win/loss stats, dan terminal activity logs.
+    - Loop evaluasi otomatis: memindai pasar via Gemini AI / candle feeds, mengeksekusi order MT5 dengan SL/TP yang proporsional, memantau posisi berjalan, dan otomatis mengunci keuntungan dengan menutup seluruh posisi saat target profit tercapai (`TARGET_REACHED`).
+    - Proteksi keselamatan modal: batas loss maksimal (`max_loss`) yang otomatis menghentikan bot jika drawdown tersentuh.
+  - `app/api/autopilot.py`: Endpoint FastAPI REST (`GET /api/autopilot/status`, `POST /api/autopilot/start`, `POST /api/autopilot/pause`, `POST /api/autopilot/stop`, `POST /api/autopilot/step`).
+  - `frontend/src/components/ai-analyst-card.tsx`: Disederhanakan kembali sesuai fungsinya — hanya menampilkan alasan analisis pasar teknikal, skenario harga (bias, entry range, SL, TP1, TP2, R:R), dan visual gambar overlay chart. Tombol satu kali eksekusi dihapus.
+  - `frontend/src/components/ai-autopilot-card.tsx`: Komponen UI modern futuristik untuk AI Trading Agent dengan input Target Profit (pilihan cepat $100, $500, $1000, $2500), glowing progress bar persentase target, metrik Floating PnL / Win-Loss / Total Trade, tombol kendali (Mulai, Jeda, Hentikan & Kunci Modal), serta terminal log live berwarna yang menampilkan jalan pikiran AI.
+  - `frontend/src/App.tsx`: Menempatkan `AiAutopilotCard` secara strategis di atas panel trading manual.
+  - `tests/test_autopilot.py`: Pengujian unit siklus hidup engine (start, pause, stop, step, target detection).
+- **Verifikasi**:
+  - 61/61 unit test Python lulus 100% (`Ran 61 tests in 2.887s — OK`).
+  - Build frontend Vite sukses (`built in 738ms`).
+
+
+### 2026-10-05 — Integrasi Penuh MetaTrader 5 (Penghapusan PAPER Mode & Penanganan AutoTrading)
+
+- **Permintaan**: Menghapus mode simulasi PAPER, mengalihkan eksekusi manual dan AI langsung ke MetaTrader 5 (MT5), dan menyelesaikan error terminal `AutoTrading disabled by client`.
+- **Analisis & Diagnostik**:
+  - Pengecekan terminal melalui Python MT5 API mendeteksi `terminal_info().trade_allowed == False` dan retcode `10027` (`TRADE_RETCODE_AUTOTRADING_DISABLED`).
+  - Hal ini terjadi karena tombol "Algo Trading" pada toolbar MetaTrader 5 belum diaktifkan (masih bertanda stop/merah atau nonaktif pada konfigurasi Expert Advisors).
+- **Implementasi**:
+  - `app/api/trade.py`:
+    - Menghapus ketergantungan simulasi paper sebagai alur utama. Seluruh order (manual & AI) kini langsung diarahkan ke terminal MT5 (`mt5.order_send`).
+    - Menambahkan pra-validasi status `terminal_info().trade_allowed` serta mapping terjemahan error bahasa Indonesia untuk retcode MT5 (10027 AutoTrading, 10004 Requote, 10014 Volume tidak valid, 10016 Stops tidak valid, 10018 Market tutup, 10019 Saldo/margin kurang, dll.).
+    - Deteksi otomatis `type_filling` broker (`ORDER_FILLING_IOC`, `ORDER_FILLING_FOK`, atau `ORDER_FILLING_RETURN`) berdasarkan bitmask `symbol_info.filling_mode`.
+    - Sinkronisasi real-time posisi terbuka langsung dari terminal MT5 (`mt5.positions_get()`) sehingga posisi yang dibuka lewat bot atau terminal MT5 muncul otomatis.
+    - Fungsi penutupan posisi (`POST /api/trade/positions/{ticket}/close`) mengirimkan deal penutup ke MT5 dengan `TRADE_ACTION_DEAL` dan `position=ticket`.
+  - `frontend/src/components/trade-panel.tsx`:
+    - Menghapus tab toggle PAPER/DEMO. Panel kini menampilkan badge permanen `MT5 LIVE (DEMO)` dengan pulse indicator.
+    - Mengintegrasikan banner instruksi status MT5 Algo Trading.
+  - `frontend/src/components/ai-analyst-card.tsx`:
+    - Mengarahkan tombol "Eksekusi Skenario AI" langsung ke mode MT5 DEMO.
+  - `tests/test_trade_execution.py`:
+    - Menambahkan isolasi test mode (`TRADING_TEST_MODE=1`) agar automated test suite dapat berjalan lancar di lingkungan CI/headless tanpa memerlukan terminal MT5 aktif.
+- **Verifikasi**:
+  - 59/59 unittest backend lulus (`Ran 59 tests in 3.033s — OK`).
+  - Frontend `npm run build` sukses tanpa issue type/bundling.
+
+
+### 2026-10-05 — Integrasi Live Google Gemini API & Verifikasi Analisis Pasar
+
+- **Permintaan**: Konfigurasi Google Gemini API Key dari Google AI Studio dan verifikasi live analisis AI.
+- **Implementasi**:
+  - API Key disimpan ke `.env` (diabaikan oleh git via `.gitignore` demi keamanan kredensial).
+  - `app/main.py`: Menambahkan pemuatan otomatis `.env` saat aplikasi dinyalakan menggunakan `python-dotenv`.
+  - `app/engines/ai_analyst.py`: Disesuaikan menggunakan model `gemini-flash-lite-latest` (dengan fallback `gemini-3.8-flash`), menghasilkan analisis teknikal terstruktur dalam bahasa Indonesia, dan menormalisasi skenario entry/SL/TP serta overlay garis chart.
+- **Verifikasi**:
+  - Uji coba live API berhasil (`provider: gemini_cloud`), menghasilkan bias, probabilitas confidence, 3 poin penalaran teknikal, serta level target SL/TP.
+  - 59/59 unittest backend lulus tanpa regresi.
+
+### 2026-10-05 — Peningkatan Kapasitas Candle, Panel BUY/SELL dengan Stop Loss, dan Eksekusi AI
+
+- **Permintaan**: Meningkatkan kapasitas candle dari 160 menjadi lebih banyak (500–1000) untuk akurasi analisis/indikator, menambahkan tombol BUY & SELL dengan input Stop Loss, serta tombol untuk eksekusi rekomendasi skenario AI.
+- **Implementasi**:
+  - `AurumMarketBridge.mq5`: Default `CandleCount` ditingkatkan dari 160 menjadi 500 bar.
+  - `app/api/endpoints.py` & `mt5_bridge.py`: Parameter `limit` chart dinaikkan default-nya ke 500 dan batas maksimal hingga 1000 candle.
+  - `frontend/src/hooks/useMarketData.ts`: Query `limit` diatur meminta 500 candle.
+  - `app/api/trade.py`: Router baru untuk eksekusi trade (`POST /api/trade/order`, `GET /api/trade/orders`, `GET /api/trade/positions`, `POST /api/trade/positions/{ticket}/close`). Menegakkan safety guard P0: akun REAL dan CONTEST diblokir mutlak, mendukung simulasi PAPER dan order DEMO MT5.
+  - `frontend/src/components/trade-panel.tsx`: Komponen UI Order Eksekusi Cepat dengan pemilihan mode PAPER/DEMO, penyesuaian volume lot, input Stop Loss & Take Profit (dengan helper auto-pips), tombol aksi BUY & SELL berwarna kontras tinggi dengan live price, notifikasi status order, serta daftar posisi terbuka.
+  - `frontend/src/components/ai-analyst-card.tsx`: Menambahkan tombol **⚡ Eksekusi Skenario {bias} dengan AI** saat analisis AI menghasilkan skenario LONG/SHORT, yang langsung mengeksekusi order dengan level SL & TP rekomendasi AI.
+- **Verifikasi**:
+  - 59/59 unittest Python lulus (`Ran 59 tests in 1.265s — OK`).
+  - 20/20 browser test Playwright lulus (desktop & mobile viewports).
+  - TypeScript & Vite build produksi lulus (`built in 1.02s`).
+
+### 2026-10-05 — Persiapan Environment Windows & Fleksibilitas Dual-Machine (Docker / Non-Docker)
+
+- **Permintaan**: Menyiapkan seluruh environment lokal di Windows tanpa Docker karena laptop ini tidak menggunakan Docker, sambil memastikan kode tetap fleksibel dan bekerja pada laptop lain yang memakai Docker/Linux.
+- **Instalasi & Environment**:
+  - Python 3.11.9 berhasil dipasang ke user scope Windows (`C:\Users\nurfa\AppData\Local\Programs\Python\Python311`).
+  - Virtual environment `.venv` dibuat dan dipasangi seluruh dependency dari `requirements.txt` dan `requirements-mt5-bridge.txt` (termasuk `MetaTrader5`, `fastapi`, `SQLAlchemy`, `pandas`, `uvicorn`, dll.).
+  - Node.js (`v24.19.0`) & frontend `node_modules` telah terverifikasi, build Vite lulus 100% (`npm run build`).
+- **Implementasi Fleksibilitas Dual-Machine**:
+  - `app/db/session.py`: Menambahkan deteksi cerdas. Di Docker/Linux dengan `POSTGRES_HOST=db`, sistem otomatis menghubungkan ke PostgreSQL; di Windows/local tanpa Docker/env, sistem otomatis fallback ke SQLite lokal (`ai_trading.db`). Mendukung pula variabel `DATABASE_URL`.
+  - `app/lab/datasets.py`: Mengubah default `LAB_DATA_DIR` agar merujuk ke `./lab-data` di root project saat berjalan di luar Docker container.
+  - `app/lab/service.py` & `app/api/lab.py`: Memperbaiki pembacaan file dengan `encoding='utf-8'` eksplisit untuk kompatibilitas Windows (mencegah `UnicodeDecodeError` / CP1252 charmap).
+  - `src/trading_agent/engine.py`: Memperbaiki penanganan handle file lock tunggal agar tertutup saat error/tabrakan worker di Windows.
+  - Script launcher: Menambahkan `run_api.bat`, `run_frontend.bat`, `run_bridge.bat`, dan panduan `.env.example`.
+- **Verifikasi**: Seluruh 55 unittest (`discover -s tests`) lulus 100% di Windows (`OK`), FastAPI lifespan dan endpoint catalog Strategy Lab (`/api/lab/catalog`) sukses merespons HTTP 200 dengan 7 indikator bawaan.
+
 
 - **UI aktif**: Sidebar **Indikator & strategi** membuka Strategy Lab dengan tab Data historis, Indikator & strategi, dan Backtest.
 - **Manajemen**: Buat, lihat, ubah sebagai versi baru, arsip/pulihkan, clone, ekspor/impor JSON, diff versi, hitungan pemakaian, parameter form dari schema, dan apply ke chart historis.

@@ -49,7 +49,7 @@ def import_indicator(payload: ImportSource, db: Session = Depends(get_db)):
 
 @router.get('/example-source')
 def example_source():
-    return Response(service.SOURCE_PATH.read_text(), media_type='text/plain', headers={'Content-Disposition': 'attachment; filename="BOSWaves.pine"'})
+    return Response(service.SOURCE_PATH.read_text(encoding='utf-8'), media_type='text/plain', headers={'Content-Disposition': 'attachment; filename="BOSWaves.pine"'})
 
 
 @router.post('/items/{kind}')
@@ -144,7 +144,7 @@ def sync_history(payload: HistoryRequest, db: Session = Depends(get_db)):
         except (HTTPError, URLError, TimeoutError, ValueError, KeyError, TypeError) as exc:
             raise HTTPException(503, 'Histori gagal dibaca atau identitas terminal berubah. Tidak ada dataset parsial disimpan.') from exc
         start = end
-    if not chunks:
+    if not chunks or identity is None:
         raise HTTPException(503, 'Terminal tidak menyediakan histori pada rentang ini. Periksa Max bars in chart.')
     request = DatasetInput(name=payload.name, **identity, interval='1m', csv=pd.DataFrame(chunks).to_csv(index=False))
     return checked(lambda: ingest_dataset(db, request))

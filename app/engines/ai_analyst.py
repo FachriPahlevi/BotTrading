@@ -165,13 +165,14 @@ def call_gemini_analysis(
     candles: list[dict[str, Any]],
     api_key: str,
 ) -> dict[str, Any]:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     prompt_text = (
         f"You are an expert AI trading analyst. Analyze the following market metrics for {symbol} ({interval}):\n"
         f"Metrics: {json.dumps(metrics)}\n"
         "Return ONLY a JSON object with keys: bias (LONG/SHORT/WAIT), confidence (integer 0-100), "
-        "rationale (array of 3 strings explaining technical reasons), "
-        "scenarios (object with main scenario direction, entry_min, entry_max, stop_loss, take_profit_1, take_profit_2, rr_ratio)."
+        "rationale (array of 3 strings explaining technical reasons in Indonesian), "
+        "scenarios (object with main scenario containing direction, entry_min, entry_max, stop_loss, take_profit_1, take_profit_2, rr_ratio)."
     )
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt_text}]}],
@@ -186,4 +187,32 @@ def call_gemini_analysis(
         parsed["symbol"] = symbol
         parsed["interval"] = interval.upper()
         parsed["provider"] = "gemini_cloud"
+
+        # Normalize scenarios.main
+        sc = parsed.get("scenarios")
+        if isinstance(sc, dict) and "main" not in sc:
+            direction = sc.get("direction") or sc.get("main_scenario_direction") or parsed.get("bias", "WAIT")
+            sc["main"] = {
+                "direction": direction,
+                "entry_min": sc.get("entry_min"),
+                "entry_max": sc.get("entry_max"),
+                "stop_loss": sc.get("stop_loss"),
+                "take_profit_1": sc.get("take_profit_1"),
+                "take_profit_2": sc.get("take_profit_2"),
+                "rr_ratio": sc.get("rr_ratio", 1.5),
+            }
+
+        if "chart_overlays" not in parsed or not parsed["chart_overlays"]:
+            overlays = []
+            if "high_20" in metrics:
+                overlays.append({"type": "resistance", "label": "Key Resistance", "price": metrics["high_20"], "style": "dashed", "color": "#f59e0b"})
+            if "low_20" in metrics:
+                overlays.append({"type": "support", "label": "Key Support", "price": metrics["low_20"], "style": "dashed", "color": "#3b82f6"})
+            main_sc = parsed.get("scenarios", {}).get("main") if isinstance(parsed.get("scenarios"), dict) else None
+            if main_sc and main_sc.get("stop_loss"):
+                overlays.append({"type": "stop_loss", "label": "Stop Loss (SL)", "price": main_sc["stop_loss"], "style": "solid", "color": "#f43f5e"})
+            if main_sc and main_sc.get("take_profit_1"):
+                overlays.append({"type": "take_profit", "label": "Target TP1", "price": main_sc["take_profit_1"], "style": "solid", "color": "#10b981"})
+            parsed["chart_overlays"] = overlays
+
         return parsed

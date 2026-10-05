@@ -57,3 +57,25 @@ class RiskEvent(Base):
     resolved = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True))
+
+
+class TradeRecord(Base):
+    __tablename__ = "trade_records"
+
+    id = Column(BigInteger, primary_key=True, index=True)
+    ticket = Column(BigInteger, unique=True, index=True, nullable=False)
+    order_id = Column(BigInteger, index=True, nullable=True)
+    symbol = Column(String(20), nullable=False)
+    action = Column(String(10), nullable=False)  # BUY or SELL
+    volume = Column(Numeric(10, 2), nullable=False)
+    price = Column(Numeric(12, 4), nullable=True)
+    sl = Column(Numeric(12, 4), nullable=True)
+    tp = Column(Numeric(12, 4), nullable=True)
+    profit = Column(Numeric(12, 2), default=0.0)
+    source = Column(String(20), nullable=False, default="manual")  # 'manual' or 'ai'
+    magic = Column(BigInteger, default=0)
+    comment = Column(String(100), nullable=True)
+    status = Column(String(20), default="CLOSED")  # 'OPEN', 'CLOSED', 'PENDING'
+    deal_time = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

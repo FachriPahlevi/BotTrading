@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 SECONDS = {'1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400}
-ROOT = Path(os.getenv('LAB_DATA_DIR', '/app/lab-data'))
+ROOT = Path(os.getenv('LAB_DATA_DIR', str(Path(__file__).resolve().parent.parent.parent / "lab-data")))
 
 
 def digest(value):

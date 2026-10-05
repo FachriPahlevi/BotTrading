@@ -141,7 +141,7 @@ class ManagementTests(DatasetTests):
         lab.archive(a['id'],self.db)
         with self.assertRaises(HTTPException):service.get_version(self.db,a['version_id'])
         lab.archive(a['id'],self.db)
-        source=service.SOURCE_PATH.read_text()
+        source=service.SOURCE_PATH.read_text(encoding='utf-8')
         imported=service.import_pine(self.db,ImportSource(name='Source',source=source,author='BOSWaves',license='MPL-2.0',adaptation='boswaves_numeric'))
         changed=service.save(self.db,'indicators','Source',dict(kind='boswaves_core',params={'almaLen':50}),imported['id'])
         self.assertEqual(changed['spec']['source'],source)

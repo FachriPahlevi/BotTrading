@@ -73,3 +73,4 @@ def get_account(response: Response):
     if account_cache is None:
         raise HTTPException(503, "Belum ada data akun MT5. Perbarui dan pasang AurumMarketBridge v1.3 di terminal.")
     return require_fresh(account_cache)
+
