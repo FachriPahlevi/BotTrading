@@ -21,6 +21,11 @@ export async function request<T>(path: string, method='GET', data?: unknown): Pr
   if (!r.ok) throw new Error(typeof body?.detail === 'string' ? body.detail : `Permintaan tidak valid / layanan gagal (HTTP ${r.status}). Periksa field form.`)
   return body
 }
+export async function requestText(path: string): Promise<string> {
+  const r = await fetch(`/api/lab${path}`, { signal: AbortSignal.timeout(60000) })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return await r.text()
+}
 export function download(name: string, data: unknown) {
   const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}))
   const link=document.createElement('a');link.href=url;link.download=name;link.click()

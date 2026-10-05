@@ -100,6 +100,7 @@ export function AiAnalystCard({
             </div>
 
             <Button
+              variant="outline"
               className="w-full"
               disabled={aiAnalyzing}
               onClick={onRunAnalysis}

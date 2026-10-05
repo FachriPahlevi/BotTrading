@@ -54,7 +54,7 @@ export function HelpDialog({
             <ul className="space-y-1.5 text-xs text-muted-foreground">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <span>Mode PAPER membaca data market tanpa pernah mengirimkan order ke terminal.</span>
+                <span>Integrasi langsung ke MetaTrader 5 (DEMO) dengan pemeriksaan status Algo Trading otomatis.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />

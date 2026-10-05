@@ -6,10 +6,12 @@ import { Card } from "@/components/ui/card";
 import { AccountPanel } from "@/components/account-panel";
 import { ActivityPanel } from "@/components/activity";
 import { AiAnalystCard } from "@/components/ai-analyst-card";
+import { AiAutopilotCard } from "@/components/ai-autopilot-card";
 import { FundamentalPanel } from "@/components/fundamental-panel";
 import { HelpDialog } from "@/components/help-dialog";
 import { LogPanel } from "@/components/log-panel";
-import { RiskCalculator } from "@/components/risk-calculator";
+import { FinancePage } from "@/components/finance-page";
+import { TradePanel } from "@/components/trade-panel";
 import { SidebarNav, type TabType } from "@/components/sidebar-nav";
 import { SymbolDialog } from "@/components/symbol-dialog";
 import { WorkspaceHeader } from "@/components/workspace-header";
@@ -107,7 +109,12 @@ export default function App() {
           <WorkspaceHeader onMobileOpenToggle={() => setMobileOpen(!mobileOpen)} symbol={symbol} interval={interval} fresh={fresh} fetching={fetching} updatedAt={market.data?.updated_at} onRefresh={refresh} />
 
           <div className="flex-1 space-y-6 p-4 md:p-6">
-            <AccountPanel account={account} loading={accountQuery.isPending} error={accountError} />
+            <AccountPanel
+              account={account}
+              loading={accountQuery.isPending}
+              error={accountError}
+              onOpenFinance={() => setActiveTab("finance")}
+            />
 
             {activeTab === "workspace" && (
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -138,7 +145,7 @@ export default function App() {
                       <div className="flex gap-1" aria-label="Timeframe">
                         {intervals.map((tf) => (
                           <Button key={tf} size="xs" variant={interval === tf ? "secondary" : "ghost"} onClick={() => setIntervalValue(tf)}>
-                            {tf}
+                            {tf.toUpperCase()}
                           </Button>
                         ))}
                       </div>
@@ -155,8 +162,15 @@ export default function App() {
                       ) : !market.data || market.data.candles.length === 0 ? (
                         <div className="flex min-h-[400px] items-center justify-center text-xs text-muted-foreground">Chart siap. Menunggu feed MT5.</div>
                       ) : (
-                        <MarketChart market={market.data} signal={selectedSignal} overlays={aiAnalysis?.chart_overlays} />
+                        <MarketChart
+                          market={market.data}
+                          signal={selectedSignal}
+                          overlays={aiAnalysis?.chart_overlays}
+                          currentInterval={interval}
+                          onIntervalChange={setIntervalValue}
+                        />
                       )}
+
                     </Suspense>
                   </Card>
 
@@ -164,20 +178,36 @@ export default function App() {
                 </div>
 
                 <div className="space-y-6">
+                  <AiAutopilotCard symbol={symbol} interval={interval} />
+                  <TradePanel symbol={symbol} currentPrice={last?.close} account={account} />
                   <AiAnalystCard aiAnalysis={aiAnalysis} aiAnalyzing={aiAnalyzing} aiError={aiError} onRunAnalysis={handleRunAiAnalysis} />
-                  <RiskCalculator account={account} />
                 </div>
               </div>
             )}
 
+            {activeTab === "finance" && <FinancePage account={account} />}
+
             {activeTab === "activity" && <ActivityPanel data={summary.data} loading={summary.isPending} error={summary.isError} onSignal={viewSignal} />}
 
-            {activeTab === "risk" && <RiskCalculator account={account} />}
 
             {activeTab === "fundamental" && <FundamentalPanel summary={summary.data} />}
 
             {activeTab === "logs" && <LogPanel />}
-            {activeTab === "lab" && <Suspense fallback={<p>Memuat Strategy Lab…</p>}><LabPanel /></Suspense>}
+            {activeTab === "indicators" && (
+              <Suspense fallback={<p className="text-sm text-muted-foreground">Memuat Manajemen Indikator…</p>}>
+                <LabPanel mode="indicators" />
+              </Suspense>
+            )}
+            {activeTab === "strategies" && (
+              <Suspense fallback={<p className="text-sm text-muted-foreground">Memuat Strategi Trading…</p>}>
+                <LabPanel mode="strategies" />
+              </Suspense>
+            )}
+            {activeTab === "lab" && (
+              <Suspense fallback={<p className="text-sm text-muted-foreground">Memuat Strategy Lab…</p>}>
+                <LabPanel mode="full" />
+              </Suspense>
+            )}
           </div>
         </main>
       </div>

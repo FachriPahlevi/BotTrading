@@ -6,24 +6,36 @@ import {
   Layers3,
   LayoutDashboard,
   ScrollText,
-  ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
+  TrendingUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { type TerminalAccount } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-export type TabType = 'workspace' | 'activity' | 'risk' | 'fundamental' | 'logs' | 'lab'
+export type TabType =
+  | 'workspace'
+  | 'activity'
+  | 'finance'
+  | 'indicators'
+  | 'strategies'
+  | 'lab'
+  | 'fundamental'
+  | 'logs'
 
 const navItems = [
   { id: 'workspace', label: 'Trading workspace', icon: LayoutDashboard },
+  { id: 'finance', label: 'Laporan Keuangan', icon: TrendingUp },
+  { id: 'indicators', label: 'Manajemen Indikator', icon: SlidersHorizontal },
+  { id: 'strategies', label: 'Strategi Trading', icon: Sparkles },
+  { id: 'lab', label: 'Strategy Lab (Backtest)', icon: CandlestickChart },
   { id: 'activity', label: 'Sinyal & aktivitas', icon: Activity },
-  { id: 'risk', label: 'Anggaran risiko', icon: ShieldCheck },
   { id: 'fundamental', label: 'Konteks pasar', icon: Layers3 },
-  { id: 'lab', label: 'Indikator & strategi', icon: CandlestickChart },
   { id: 'logs', label: 'Log sistem', icon: ScrollText },
 ]
+
 
 export function SidebarNav({
   activeTab,

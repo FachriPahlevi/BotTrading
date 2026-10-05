@@ -18,7 +18,7 @@ export async function fetchMarketData(
   const query = new URLSearchParams({
     symbol,
     interval: normalizedInterval,
-    limit: '300',
+    limit: '500',
   }).toString()
   const data = await apiGet<Market>(`/api/market/chart?${query}`, signal)
 
