@@ -6,6 +6,7 @@ import os
 import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -19,37 +20,46 @@ def digest(value):
 
 
 def parse_csv(text, interval, as_of=None):
-    frame = pd.read_csv(io.StringIO(text))
+    raw = pd.read_csv(io.StringIO(text))
+    if not isinstance(raw, pd.DataFrame):
+        raise ValueError('CSV tidak valid.')
     columns = ['time', 'open', 'high', 'low', 'close', 'volume']
-    if not set(columns).issubset(frame.columns) or len(frame) > 200000:
+    if not set(columns).issubset(raw.columns) or len(raw) > 200000:
         raise ValueError('CSV memerlukan time,open,high,low,close,volume; maksimal 200.000 baris.')
-    frame = frame[columns].copy()
-    if pd.api.types.is_numeric_dtype(frame.time):
-        times = pd.to_numeric(frame.time, errors='raise')
-        if not np.isfinite(times).all() or (times % 1 != 0).any():
+    frame = raw[columns].copy()
+    time_series = pd.Series(frame['time'])
+    if pd.api.types.is_numeric_dtype(time_series):
+        times = cast(pd.Series, pd.to_numeric(time_series, errors='raise'))
+        if not np.isfinite(times.to_numpy()).all() or bool(np.any(times % 1 != 0)):
             raise ValueError('Timestamp harus integer milidetik UTC.')
         frame['time'] = times.astype('int64')
     else:
-        if not frame.time.astype(str).str.contains(r'(?:Z|[+-]00:00)$', regex=True).all():
+        if not time_series.astype(str).str.contains(r'(?:Z|[+-]00:00)$', regex=True).all():
             raise ValueError('Timestamp teks wajib UTC eksplisit (Z atau +00:00).')
-        frame['time'] = pd.to_datetime(frame.time, utc=True, format='mixed').astype('int64') // 1000000
+        dt_series = cast(pd.Series, pd.to_datetime(time_series, utc=True, format='mixed'))
+        frame['time'] = dt_series.astype('int64') // 1000000
     for key in columns[1:]:
-        frame[key] = pd.to_numeric(frame[key], errors='raise').astype(float)
+        col_series = cast(pd.Series, pd.to_numeric(frame[key], errors='raise'))
+        frame[key] = col_series.astype(float)
     if not np.isfinite(frame.to_numpy()).all():
         raise ValueError('Data NaN/Infinity tidak diizinkan.')
-    if ((frame.low <= 0) | (frame.volume < 0) | (frame.high < frame.low)
-        | (frame.high < frame[['open', 'close']].max(axis=1))
-        | (frame.low > frame[['open', 'close']].min(axis=1))).any():
+    max_oc = np.maximum(frame['open'], frame['close'])
+    min_oc = np.minimum(frame['open'], frame['close'])
+    if (bool(np.any(frame['low'] <= 0)) or bool(np.any(frame['volume'] < 0)) or bool(np.any(frame['high'] < frame['low']))
+        or bool(np.any(frame['high'] < max_oc))
+        or bool(np.any(frame['low'] > min_oc))):
         raise ValueError('OHLC atau volume tidak konsisten.')
     step = SECONDS[interval]*1000
-    if ((frame.time < 946684800000) | (frame.time % step != 0)).any():
+    if bool(np.any(frame['time'] < 946684800000)) or bool(np.any(frame['time'] % step != 0)):
         raise ValueError('Waktu candle tidak sejajar interval UTC atau di luar rentang.')
     cutoff = int((as_of or datetime.now(timezone.utc)).timestamp()*1000)
-    if (frame.time > cutoff).any():
+    if bool(np.any(frame['time'] > cutoff)):
         raise ValueError('Candle masa depan ditolak.')
-    dropped_open = int((frame.time+step > cutoff).sum())
-    duplicates = int(frame.duplicated('time').sum())
-    frame = frame[frame.time+step <= cutoff].drop_duplicates('time', keep='last').sort_values('time').reset_index(drop=True)
+    dropped_open = int(np.sum(frame['time'] + step > cutoff))
+    duplicates = int(np.sum(pd.Series(frame['time']).duplicated()))
+    mask = frame['time'] + step <= cutoff
+    filtered = cast(pd.DataFrame, frame.loc[mask])
+    frame = filtered.drop_duplicates(subset=['time'], keep='last').sort_values('time').reset_index(drop=True)
     if len(frame) < 2:
         raise ValueError('Minimal dua candle tertutup diperlukan.')
     return frame, {'duplicates_replaced': duplicates, 'open_bars_removed': dropped_open}

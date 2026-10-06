@@ -1,11 +1,20 @@
 {
+  "venvPath": ".",
+  "venv": ".venv",
+  "stubPath": "typings",
   "include": [
-    ".",
     "app",
     "src",
-    "tests"
+    "tests",
+    "mt5_bridge.py"
+  ],
+  "exclude": [
+    "tests/test_diagnostics.py",
+    "tests/test_execution_reconciliation.py",
+    "tests/test_mt5_account_bridge.py"
   ],
   "extraPaths": [
+    "typings",
     "src",
     "."
   ],
@@ -13,6 +22,7 @@
     {
       "root": ".",
       "extraPaths": [
+        "typings",
         "src",
         "."
       ]

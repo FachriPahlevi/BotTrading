@@ -65,10 +65,22 @@ export function AccountPanel({
           )}
 
           <Badge variant={error ? 'destructive' : 'outline'} className="text-[10px]">
-            {loading ? 'Memuat MT5…' : error ? 'MT5 Offline' : 'MT5 Terhubung'}
+            {error
+              ? 'Data kedaluwarsa'
+              : account
+                ? 'Data diterima'
+                : loading
+                  ? 'Memuat akun…'
+                  : 'Data tidak tersedia'}
           </Badge>
         </div>
       </div>
+
+      {error && (
+        <p role="alert" className="text-xs text-amber-300">
+          {error}
+        </p>
+      )}
 
       {/* 5 Compact Cards */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -80,7 +92,7 @@ export function AccountPanel({
               data-testid="account-balance"
               className="font-mono text-base font-bold tracking-tight text-foreground"
             >
-              {account ? accountMoney(account.balance, account.currency) : '$0.00'}
+              {accountMoney(account?.balance, account?.currency)}
             </p>
             <p className="text-[10px] text-muted-foreground font-mono">Modal Pokok MT5</p>
           </CardContent>
@@ -94,7 +106,7 @@ export function AccountPanel({
               data-testid="account-equity"
               className="font-mono text-base font-bold tracking-tight text-foreground"
             >
-              {account ? accountMoney(account.equity, account.currency) : '$0.00'}
+              {accountMoney(account?.equity, account?.currency)}
             </p>
             <p className="text-[10px] text-muted-foreground font-mono">Nilai Likuiditas Akun</p>
           </CardContent>
@@ -110,7 +122,7 @@ export function AccountPanel({
                 activeFloatingPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
-              {account ? accountMoney(activeFloatingPnl, account.currency) : '$0.00'}
+              {accountMoney(account ? activeFloatingPnl : undefined, account?.currency)}
             </p>
             <p className="text-[10px] text-muted-foreground font-mono">Floating PnL Saat Ini</p>
           </CardContent>

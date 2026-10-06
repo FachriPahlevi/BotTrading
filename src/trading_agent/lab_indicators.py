@@ -4,6 +4,7 @@ The BOSWaves adaptation is deliberately limited to numerical trend/stop outputs.
 No Pine execution or claims of TradingView parity without reference fixtures.
 """
 import math
+from typing import Any, cast
 import numpy as np
 import pandas as pd
 from trading_agent.indicators import calculate_ema, calculate_atr
@@ -26,14 +27,16 @@ REGISTRY = {
         'devLen': field(34, 5, 2000, True), 'devMult': field(.65, .1, 3), 'slopeLen': field(3, 1, 10, True),
         'slopeMin': field(.08, 0, 1), 'atrLen': field(14, 5, 500, True), 'stopLookback': field(12, 3, 50, True),
         'minStopAtr': field(.75, .25, 3), 'maxStopAtr': field(3, 1, 8),
-    }, outputs=['alma', 'upper', 'lower', 'edge', 'trend', 'bull_flip', 'bear_flip', 'risk']),
+        'targetCount': field(4, 2, 4, True), 'zonePct': field(.06, .01, .25),
+        'extendBars': field(30, 5, 200, True), 'keepPositions': field(4, 1, 12, True),
+    }, outputs=['alma', 'mid', 'edge', 'edge_glow', 'upper', 'lower', 'conviction', 'trend', 'bull_flip', 'bear_flip', 'risk', 'entry', 'stop', 'target1', 'target2', 'target3', 'target4']),
 }
 
 
 def parameters(kind, supplied):
     if kind not in REGISTRY:
         raise ValueError('Jenis indikator tidak didukung.')
-    schema = REGISTRY[kind]['params']
+    schema = cast(dict[str, Any], REGISTRY[kind]['params'])
     if set(supplied)-set(schema):
         raise ValueError('Parameter indikator tidak dikenal.')
     result = {}
@@ -75,9 +78,9 @@ def wilder(series, period):
     return pd.Series(values, index=series.index)
 
 
-def compute(frame, kind, supplied):
+def compute(frame: Any, kind: str, supplied: dict[str, Any]) -> dict[str, Any]:
     p = parameters(kind, supplied)
-    period = p.get('period')
+    period = int(p.get('period', 14))
     close = frame.close
     if kind == 'sma':
         out = {'value': close.rolling(period).mean()}
@@ -88,12 +91,13 @@ def compute(frame, kind, supplied):
     elif kind == 'alma':
         out = {'value': alma(close, period, p['offset'], p['sigma'])}
     elif kind == 'bbands':
-        middle, dev = close.rolling(period).mean(), close.rolling(period).std(ddof=0)*p['mult']
+        middle = close.rolling(period).mean()
+        dev = close.rolling(period).std(ddof=0)*p['mult']
         out = {'middle': middle, 'upper': middle+dev, 'lower': middle-dev}
     elif kind == 'rsi':
         diff = close.diff()
         gain, loss = wilder(diff.clip(lower=0), period), wilder(-diff.clip(upper=0), period)
-        value = 100-100/(1+gain/loss.replace(0, np.nan))
+        value = cast(pd.Series, 100-100/(1+gain/loss.replace(0, np.nan)))
         value[(loss == 0) & (gain > 0)] = 100
         value[(loss == 0) & (gain == 0)] = 50
         out = {'value': value}
@@ -102,5 +106,5 @@ def compute(frame, kind, supplied):
         out = calculate_boswaves(frame, p)
     # Warm-up is a validity policy, not an assertion of exact percentage error.
     for value in out.values():
-        value.iloc[:warmup(kind, p)-1] = np.nan
+        cast(Any, value).iloc[:warmup(kind, p)-1] = np.nan
     return out

@@ -1,7 +1,8 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -21,12 +22,13 @@ router = APIRouter()
 market_cache = {}
 
 
-def _to_float(value, default=0.0):
+def _to_float(value: Any, default: float = 0.0) -> float:
     if value is None:
         return default
-    if isinstance(value, Decimal):
+    try:
         return float(value)
-    return value
+    except (TypeError, ValueError):
+        return default
 
 
 def _iso_datetime(value):
@@ -94,7 +96,7 @@ def _build_market_payload(symbol, interval, candles):
     normalized = []
     for item in frame.to_dict("records"):
         normalized.append({key: int(item[key]) if key == "time" else _series_value(item[key]) for key in fields})
-    return _add_trade_markers({"symbol": symbol, "interval": interval, "provider": "HFM MetaTrader 5", "updated_at": datetime.utcnow().isoformat() + "Z", "candles": normalized})
+    return _add_trade_markers({"symbol": symbol, "interval": interval, "provider": "HFM MetaTrader 5", "updated_at": datetime.now(timezone.utc).isoformat(), "candles": normalized})
 
 
 @router.post("/mt5/candles")
@@ -107,7 +109,7 @@ def receive_mt5_candles(payload: dict):
     if not isinstance(candles, list) or len(candles) < 60:
         raise HTTPException(status_code=422, detail="At least 60 candles are required")
     market_cache[(symbol, interval)] = {
-        "timestamp_received": datetime.utcnow().timestamp(),
+        "timestamp_received": datetime.now(timezone.utc).timestamp(),
         "payload": _build_market_payload(symbol, interval, candles[-500:])
     }
     return {"status": "accepted", "candles": len(candles), "instance_id": SESSION_ID}
@@ -144,7 +146,7 @@ def get_market_chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int =
                         break
 
         if cached_entry:
-            age = datetime.utcnow().timestamp() - cached_entry["timestamp_received"]
+            age = datetime.now(timezone.utc).timestamp() - cached_entry["timestamp_received"]
             if age <= 60:
                 return cached_entry["payload"]
             else:
@@ -153,7 +155,7 @@ def get_market_chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int =
 
         received_markets = [
             (cached_symbol, cached_interval,
-             datetime.utcnow().timestamp() - entry["timestamp_received"])
+             datetime.now(timezone.utc).timestamp() - entry["timestamp_received"])
             for (cached_symbol, cached_interval), entry in sorted(market_cache.items())
         ]
         detail = f"No MT5 candles received for {symbol} ({interval}) yet."
@@ -200,7 +202,7 @@ def get_regime(symbol: str, db: Session = Depends(get_db)):
                         break
         
         if entry:
-            age = datetime.utcnow().timestamp() - entry["timestamp_received"]
+            age = datetime.now(timezone.utc).timestamp() - entry["timestamp_received"]
             if age <= 3600: # We allow up to 1h old data for regime if no recent updates
                 candles = entry["payload"].get("candles", [])
                 if len(candles) >= 100:
@@ -248,12 +250,12 @@ def get_calibration_report(model_version: str = "", period: str = ""):
         {"confidence": 75, "outcome": 1},
         {"confidence": 85, "outcome": 0}
     ]
-    report = calibration_engine.generate_reliability_report(mock_predictions)
+    report: dict[str, Any] = dict(calibration_engine.generate_reliability_report(mock_predictions))
     report["model_version"] = model_version or "v1.0"
     return report
 
 @router.get("/risk/events")
-def get_risk_events(account_id: int = None, resolved: bool = False, db: Session = Depends(get_db)):
+def get_risk_events(account_id: int | None = None, resolved: bool = False, db: Session = Depends(get_db)):
     query = db.query(models.RiskEvent).filter(models.RiskEvent.resolved == resolved)
     if account_id:
         query = query.filter(models.RiskEvent.trading_account_id == account_id)
@@ -343,7 +345,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
     )
 
     return {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "overview": {
             "total_signals": total_signals,
             "open_signals": open_signal_count,

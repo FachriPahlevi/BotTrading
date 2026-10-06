@@ -124,6 +124,7 @@ def submit_trade_order(payload: OrderSubmitRequest):
 
     now_iso = datetime.now(timezone.utc).isoformat()
     ticket = int(time.time() * 1000) % 1_000_000_000
+    comment_str = payload.comment or f"Aurum_{payload.source[:2]}_{int(time.time()) % 10000}"
 
     if not is_test_mode:
         # DIRECT MT5 EXECUTION
@@ -448,7 +449,7 @@ def close_position(ticket: int, payload: Optional[ClosePositionPayload] = None):
 
                     # Check partial volume
                     is_partial = req_vol is not None and req_vol < float(pos.volume)
-                    close_vol = round(req_vol, 2) if is_partial else float(pos.volume)
+                    close_vol = round(req_vol, 2) if (is_partial and req_vol is not None) else float(pos.volume)
 
                     close_req = {
                         "action": mt5.TRADE_ACTION_DEAL,
@@ -484,7 +485,7 @@ def close_position(ticket: int, payload: Optional[ClosePositionPayload] = None):
 
     pos = matched[0]
     is_partial = req_vol is not None and req_vol < pos["volume"]
-    close_vol = round(req_vol, 2) if is_partial else pos["volume"]
+    close_vol = round(req_vol, 2) if (is_partial and req_vol is not None) else pos["volume"]
 
     if is_partial:
         pos["volume"] = round(pos["volume"] - close_vol, 2)

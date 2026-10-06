@@ -15,6 +15,7 @@ import { TradePanel } from "@/components/trade-panel";
 import { SidebarNav, type TabType } from "@/components/sidebar-nav";
 import { SymbolDialog } from "@/components/symbol-dialog";
 import { WorkspaceHeader } from "@/components/workspace-header";
+import { RiskCalculator } from "@/components/risk-calculator";
 
 import { useMarketData } from "@/hooks/useMarketData";
 import { useAccountData } from "@/hooks/useAccountData";
@@ -25,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 const intervals = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const LabPanel = lazy(() => import("@/components/lab/lab-panel").then(m => ({default: m.LabPanel})));
+const IndicatorManagerPage = lazy(() => import("@/components/lab/indicator-manager-page").then(m => ({default: m.IndicatorManagerPage})));
 
 const MarketChart = lazy(() =>
   import("@/components/market-chart").then((module) => ({
@@ -70,10 +72,11 @@ export default function App() {
   const accountAge = accountQuery.data ? (now - Date.parse(accountQuery.data.updated_at)) / 1000 : Infinity;
   const account = !accountQuery.isError && accountAge <= 60 && accountAge >= -10 ? accountQuery.data : undefined;
 
-  const last = market.data?.candles.at(-1);
-  const first = market.data?.candles[0];
+  const marketData = market.data;
+  const last = marketData?.candles.at(-1);
+  const first = marketData?.candles[0];
   const change = first && last && first.open !== 0 ? ((last.close - first.open) / first.open) * 100 : null;
-  const age = market.data ? (now - Date.parse(market.data.updated_at)) / 1000 : Infinity;
+  const age = marketData ? (now - Date.parse(marketData.updated_at)) / 1000 : Infinity;
   const stale = market.isError || age > 60 || age < -60;
   const fresh = !!last && !stale;
   const fetching = market.isFetching || summary.isFetching || health.isFetching || accountQuery.isFetching;
@@ -106,15 +109,17 @@ export default function App() {
         <SidebarNav activeTab={activeTab} onTabChange={setActiveTab} mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} onOpenHelp={() => setHelpOpen(true)} />
 
         <main className="flex-1 min-w-0 flex flex-col">
-          <WorkspaceHeader onMobileOpenToggle={() => setMobileOpen(!mobileOpen)} symbol={symbol} interval={interval} fresh={fresh} fetching={fetching} updatedAt={market.data?.updated_at} onRefresh={refresh} />
+          <WorkspaceHeader onMobileOpenToggle={() => setMobileOpen(!mobileOpen)} symbol={symbol} interval={interval} fresh={fresh} fetching={fetching} updatedAt={marketData?.updated_at} onRefresh={refresh} />
 
           <div className="flex-1 space-y-6 p-4 md:p-6">
-            <AccountPanel
-              account={account}
-              loading={accountQuery.isPending}
-              error={accountError}
-              onOpenFinance={() => setActiveTab("finance")}
-            />
+            {activeTab !== "indicators" && activeTab !== "lab" && activeTab !== "strategies" && (
+              <AccountPanel
+                account={account}
+                loading={accountQuery.isPending}
+                error={accountError}
+                onOpenFinance={() => setActiveTab("finance")}
+              />
+            )}
 
             {activeTab === "workspace" && (
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -130,7 +135,7 @@ export default function App() {
                         {last && (
                           <div className="flex items-baseline gap-2">
                             <span className="font-mono text-lg font-bold">{number(last.close, 5)}</span>
-                            {change !== null && (
+                            {change !== null && change !== undefined && (
                               <span className={cn("flex items-center text-xs font-medium", change >= 0 ? "text-emerald-400" : "text-rose-400")}>
                                 {change >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
                                 {Math.abs(change).toFixed(2)}%
@@ -159,18 +164,18 @@ export default function App() {
                             <RefreshCw className="size-3" /> Coba hubungkan
                           </Button>
                         </div>
-                      ) : !market.data || market.data.candles.length === 0 ? (
+                      ) : !marketData || marketData.candles.length === 0 ? (
                         <div className="flex min-h-[400px] items-center justify-center text-xs text-muted-foreground">Chart siap. Menunggu feed MT5.</div>
                       ) : (
                         <MarketChart
-                          market={market.data}
+                          market={marketData}
                           signal={selectedSignal}
                           overlays={aiAnalysis?.chart_overlays}
                           currentInterval={interval}
                           onIntervalChange={setIntervalValue}
+                          onOpenIndicatorManager={() => setActiveTab("indicators")}
                         />
                       )}
-
                     </Suspense>
                   </Card>
 
@@ -180,6 +185,7 @@ export default function App() {
                 <div className="space-y-6">
                   <AiAutopilotCard symbol={symbol} interval={interval} />
                   <TradePanel symbol={symbol} currentPrice={last?.close} account={account} />
+                  <RiskCalculator account={account} />
                   <AiAnalystCard aiAnalysis={aiAnalysis} aiAnalyzing={aiAnalyzing} aiError={aiError} onRunAnalysis={handleRunAiAnalysis} />
                 </div>
               </div>
@@ -195,7 +201,7 @@ export default function App() {
             {activeTab === "logs" && <LogPanel />}
             {activeTab === "indicators" && (
               <Suspense fallback={<p className="text-sm text-muted-foreground">Memuat Manajemen Indikator…</p>}>
-                <LabPanel mode="indicators" />
+                <IndicatorManagerPage />
               </Suspense>
             )}
             {activeTab === "strategies" && (

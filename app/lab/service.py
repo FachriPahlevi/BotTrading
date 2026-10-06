@@ -2,6 +2,7 @@ import hashlib
 import re
 from pathlib import Path
 
+from typing import Any, Optional
 from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -15,7 +16,7 @@ from trading_agent.lab_rules import validate_rules
 SOURCE_PATH = Path(__file__).parent / 'sources' / 'trend_target_ribbon.pine'
 
 
-def serialize(item, version, db):
+def serialize(item: Any, version: Any, db: Any) -> dict[str, Any]:
     versions = db.query(LabVersion).filter_by(item_id=item.id).order_by(LabVersion.number.desc()).all()
     ids = {v.id for v in versions}
     usage = sum(1 for run in db.query(LabRun).all() if run.snapshot.get('strategy_version_id') in ids
@@ -28,9 +29,11 @@ def serialize(item, version, db):
                                created_at=v.created_at.isoformat()) for v in versions])
 
 
-def get_version(db, version_id, kind=None, allow_archived=False):
+def get_version(db: Any, version_id: str, kind: Optional[str] = None, allow_archived: bool = False) -> tuple[LabItem, LabVersion]:
     version = db.get(LabVersion, version_id)
-    item = db.get(LabItem, version.item_id) if version else None
+    if not version:
+        raise HTTPException(404, 'Versi tidak ditemukan.')
+    item = db.get(LabItem, version.item_id)
     if not item or (kind and item.kind != kind):
         raise HTTPException(404, 'Versi tidak ditemukan.')
     if item.archived and not allow_archived:
@@ -87,7 +90,7 @@ def validate_spec(db, kind, spec):
     raise HTTPException(400, 'Jenis item tidak didukung.')
 
 
-def save(db, kind, name, spec, item_id=None, builtin=False, trusted=False):
+def save(db: Any, kind: str, name: str, spec: dict[str, Any], item_id: Optional[str] = None, builtin: bool = False, trusted: bool = False) -> dict[str, Any]:
     name = name.strip()
     if not name:
         raise ValueError('Nama wajib diisi.')
@@ -96,7 +99,7 @@ def save(db, kind, name, spec, item_id=None, builtin=False, trusted=False):
     item = db.get(LabItem, item_id) if item_id else None
     if item_id and (not item or item.kind != kind):
         raise HTTPException(404, 'Item tidak ditemukan.')
-    if item and (item.builtin or item.archived):
+    if item and ((item.builtin and not trusted) or item.archived):
         raise HTTPException(409, 'Bawaan read-only atau item diarsipkan. Buat duplikat dahulu.')
     if not item:
         item = LabItem(kind=kind, name=name, name_key=name.casefold(), builtin=builtin)
@@ -130,26 +133,16 @@ def seed(db):
     for key, schema in REGISTRY.items():
         name = schema['label']
         existing = db.query(LabItem).filter_by(kind='indicators', name_key=name.casefold()).first()
-        if existing:
-            if key == 'boswaves_core':
-                latest = db.query(LabVersion).filter_by(item_id=existing.id).order_by(LabVersion.number.desc()).first()
-                if latest and (not latest.spec.get('source') or len(latest.spec.get('source', '')) < 50):
-                    source = SOURCE_PATH.read_text(encoding='utf-8')
-                    spec = dict(latest.spec)
-                    spec['source'] = source
-                    latest.spec = spec
-                    db.commit()
-            continue
         spec = dict(kind=key, params=parameters(key, {}), status='draft' if key == 'boswaves_core' else 'builtin',
-                    description='Numerical adaptation; source Pine drawing/position lifecycle unsupported. TradingView parity not verified.' if key == 'boswaves_core' else 'Implementasi numerik bawaan.')
+                    description='Adaptasi numerik dan visual ribbon/entry/SL/target; parity TradingView belum diverifikasi pada candle referensi identik.' if key == 'boswaves_core' else 'Implementasi numerik bawaan.')
         if key == 'boswaves_core':
             source = SOURCE_PATH.read_text(encoding='utf-8')
             spec['source'] = source
             spec['provenance'] = dict(author='BOSWaves', license='MPL-2.0', source_hash=hashlib.sha256(source.encode()).hexdigest(), translator='manual-numeric-v1')
-        save(db, 'indicators', name, spec, builtin=True, trusted=True)
+        save(db, 'indicators', name, spec, existing.id if existing else None, builtin=True, trusted=True)
 
 
-def import_pine(db, payload):
+def pine_spec(payload):
     source = payload.source.replace('\r\n', '\n')
     blocked = [token for token in ['strategy.', 'lookahead_on', 'request.security', 'line.', 'box.', 'label.', 'array.', 'matrix.', 'import '] if token in source]
     provenance = dict(author=payload.author, license=payload.license, source_url=payload.source_url,
@@ -161,5 +154,18 @@ def import_pine(db, payload):
         if source.strip() != known.strip() or payload.license != 'MPL-2.0':
             raise ValueError('Adaptasi BOSWaves hanya untuk source contoh persis dan lisensi MPL-2.0. Source lain perlu review.')
         spec.update(kind='boswaves_core', params=parameters('boswaves_core', {}), status='draft',
-                    description='Adaptasi numerik: ALMA/deviation/trend flip/risk distance. Gambar Pine, target-hit lifecycle, gradient dan alerts tidak diterjemahkan; belum diverifikasi TradingView.')
-    return save(db, 'indicators', payload.name, spec, trusted=True)
+                    description='Adaptasi numerik dan visual ribbon/entry/SL/target. Target-hit styling dan alerts belum diterjemahkan; parity TradingView belum diverifikasi.')
+    return spec
+
+
+def import_pine(db: Any, payload: Any) -> dict[str, Any]:
+    return save(db, 'indicators', payload.name, pine_spec(payload), trusted=True)
+
+
+def update_pine(db: Any, item_id: str, payload: Any) -> dict[str, Any]:
+    item = db.get(LabItem, item_id)
+    if not item or item.kind != 'indicators':
+        raise HTTPException(404, 'Indikator tidak ditemukan.')
+    if item.builtin or item.archived:
+        raise HTTPException(409, 'Indikator bawaan read-only atau indikator sedang diarsipkan.')
+    return save(db, 'indicators', payload.name, pine_spec(payload), item_id=item.id, trusted=True)

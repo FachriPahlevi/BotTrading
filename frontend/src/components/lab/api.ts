@@ -15,6 +15,8 @@ export interface Schema { label: string; params: Record<string, {type: string; d
 export interface Run { id: string; name: string; status: string; progress: number; error?: string; metrics: Record<string, unknown>; created_at: string; snapshot?: Record<string, unknown>; result?: {trades: Record<string, unknown>[]; equity_curve: {time: number; equity: number; balance: number}[]; [key: string]: unknown} }
 export interface Catalog { indicators: Item[]; strategies: Item[]; datasets: Item[]; schemas: Record<string, Schema>; runs: Run[]; run_count: number; history_bridge_configured: boolean }
 export interface Preview { candles: {time:number;open:number;high:number;low:number;close:number;volume:number}[]; lines: Record<string, (number|null)[]>; instances: {alias:string;kind:string}[]; symbol:string;interval:string;note:string;warmup_bars:number }
+export interface ChartIndicatorConfig extends Instance { key:string; name:string; visible:boolean }
+export interface IndicatorCalculation { lines:Record<string,(number|null)[]>;instances:{alias:string;kind:string;status:string}[];warmup_bars:number;ready:boolean;candles:number;symbol:string;interval:string;note:string }
 export async function request<T>(path: string, method='GET', data?: unknown): Promise<T> {
   const r = await fetch(`/api/lab${path}`, {method, headers: {'Content-Type':'application/json'}, body: data === undefined ? undefined : JSON.stringify(data), signal: AbortSignal.timeout(180000)})
   const body = await r.json().catch(() => null)

@@ -93,3 +93,25 @@ class RunInput(StrictModel):
 class PreviewInput(StrictModel):
     dataset_version_id: str
     indicators: list[IndicatorInstance] = Field(min_length=1, max_length=32)
+
+
+class CandleInput(StrictModel):
+    time: int = Field(gt=0)
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float = Field(default=0, ge=0)
+
+    @model_validator(mode='after')
+    def valid_ohlc(self):
+        if self.low <= 0 or self.high < self.low or self.high < max(self.open, self.close) or self.low > min(self.open, self.close):
+            raise ValueError('OHLC tidak konsisten.')
+        return self
+
+
+class ChartIndicatorsInput(StrictModel):
+    symbol: str = Field(pattern=r'^[A-Za-z0-9_.-]{1,30}$')
+    interval: Literal['1m', '5m', '15m', '1h', '4h', '1d']
+    candles: list[CandleInput] = Field(min_length=2, max_length=500)
+    indicators: list[IndicatorInstance] = Field(min_length=1, max_length=32)

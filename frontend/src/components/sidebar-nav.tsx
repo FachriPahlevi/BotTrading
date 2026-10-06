@@ -24,6 +24,7 @@ export type TabType =
   | 'lab'
   | 'fundamental'
   | 'logs'
+  | 'risk'
 
 const navItems = [
   { id: 'workspace', label: 'Trading workspace', icon: LayoutDashboard },

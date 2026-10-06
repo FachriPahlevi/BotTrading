@@ -1,13 +1,26 @@
 """Run this on the Windows machine where HFM MetaTrader 5 is already logged in."""
 
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import MetaTrader5 as mt5
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 
-app = FastAPI(title="HFM MT5 Bridge")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    path = os.getenv("MT5_TERMINAL_PATH") or None
+    if not mt5.initialize(path):
+        raise RuntimeError(f"MT5 initialization failed: {mt5.last_error()}")
+    try:
+        yield
+    finally:
+        mt5.shutdown()
+
+
+app = FastAPI(title="HFM MT5 Bridge", lifespan=lifespan)
 
 
 @app.get('/history')
@@ -77,17 +90,6 @@ def value(item):
     return None if pd.isna(item) else round(float(item), 6)
 
 
-@app.on_event("startup")
-def connect_mt5():
-    path = os.getenv("MT5_TERMINAL_PATH") or None
-    if not mt5.initialize(path):
-        raise RuntimeError(f"MT5 initialization failed: {mt5.last_error()}")
-
-
-@app.on_event("shutdown")
-def disconnect_mt5():
-    mt5.shutdown()
-
 
 @app.get("/chart")
 def chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 800):
@@ -128,10 +130,10 @@ def chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 800):
 
     keys = ("open", "high", "low", "close", "tick_volume", "sma_20", "ema_50", "bb_upper", "bb_lower", "rsi_14", "macd", "macd_signal")
     candles = [{
-        "time": int(row.time) * 1000,
-        "open": value(row.open), "high": value(row.high), "low": value(row.low), "close": value(row.close),
-        "volume": value(row.tick_volume), "sma_20": value(row.sma_20), "ema_50": value(row.ema_50),
-        "bb_upper": value(row.bb_upper), "bb_lower": value(row.bb_lower), "rsi_14": value(row.rsi_14),
-        "macd": value(row.macd), "macd_signal": value(row.macd_signal),
+        "time": int(getattr(row, "time")) * 1000,
+        "open": value(getattr(row, "open")), "high": value(getattr(row, "high")), "low": value(getattr(row, "low")), "close": value(getattr(row, "close")),
+        "volume": value(getattr(row, "tick_volume")), "sma_20": value(getattr(row, "sma_20")), "ema_50": value(getattr(row, "ema_50")),
+        "bb_upper": value(getattr(row, "bb_upper")), "bb_lower": value(getattr(row, "bb_lower")), "rsi_14": value(getattr(row, "rsi_14")),
+        "macd": value(getattr(row, "macd")), "macd_signal": value(getattr(row, "macd_signal")),
     } for row in frame.itertuples()]
     return {"symbol": symbol, "interval": interval, "provider": "HFM MetaTrader 5", "updated_at": datetime.now(timezone.utc).isoformat(), "candles": candles}

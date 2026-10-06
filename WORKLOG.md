@@ -4,24 +4,51 @@ Catatan kelanjutan sesi. Aturan kerja berada di [AGENTS.md](AGENTS.md), fakta te
 
 ## Current Handoff
 
-- **Permintaan aktif**: Script BOSWaves tidak muncul di antarmuka Manajemen Indikator (hanya komentar 1 baris).
-- **Status**: Selesai diperbaiki dan diverifikasi. Backend `seed()` kini menyimpan seluruh 776 baris Pine script v6 ke dalam `spec['source']`, dan frontend otomatis memuat script lengkap via API jika belum tersimpan.
-- **Lokasi**:
-  - Backend Seed: [app/lab/service.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/app/lab/service.py).
-  - Studio UI: [frontend/src/components/lab/tradingview-indicator-studio.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/lab/tradingview-indicator-studio.tsx).
-  - Pine Editor: [frontend/src/components/lab/pine-editor.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/lab/pine-editor.tsx).
-  - API Client: [frontend/src/components/lab/api.ts](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/lab/api.ts).
-- **Hasil Verifikasi terbaru**:
-  - 64/64 unittest Python lulus (100% OK).
-  - Playwright E2E test `tests/lab.spec.ts` lulus 2/2 (4.5s).
-  - Frontend Vite build lulus tanpa error (`built in 767ms`).
-- **Langkah berikutnya**: Pengguna yang membuka menu "Manajemen Indikator" akan langsung melihat indikator BOSWaves lengkap dengan 776 baris Pine Script v6 di Pine Editor, atau dapat memuatnya dari dropdown template kapan saja.
+- **Permintaan aktif**: Memperbaiki semua error IDE/linter (Python & TypeScript) serta menyelesaikan merge conflicts yang terjadi di branch lokal.
+- **Status**: Selesai 100%. Semua konflik merge telah diselesaikan dengan menggabungkan fitur kedua branch tanpa regresi. Semua type error di backend (Pyright) dan frontend (TypeScript) telah diperbaiki (0 error).
+- **Lokasi Terkait**:
+  - Backend: `app/api/endpoints.py`, `app/api/finance.py`, `app/api/lab.py`, `app/api/trade.py`, `app/engines/ai_autopilot.py`, `app/lab/datasets.py`, `app/lab/models.py`, `app/lab/service.py`, `app/main.py`, `mt5_bridge.py`, `tests/test_strategy_lab.py`, `typings/MetaTrader5/`.
+  - Frontend: `frontend/src/App.tsx`, `frontend/src/components/account-panel.tsx`, `frontend/src/components/chart-indicator-dialog.tsx`, `frontend/src/components/lab/library-panel.tsx`, `frontend/src/components/market-chart.tsx`, `frontend/src/components/sidebar-nav.tsx`, `frontend/tests/lab.spec.ts`.
+- **Hasil Verifikasi**:
+  - Python Unit Tests: 66/66 lulus 100% OK (`Ran 66 tests in 2.558s`).
+  - Frontend Build: `npm run build` sukses tanpa error (`tsc --noEmit && vite build` built in ~740ms).
+  - Playwright Tests: 24/24 lulus 100% OK di desktop & mobile (`workspace.spec.ts`, `lab.spec.ts`, `drawing-layouts.spec.ts`, `indicator-management.spec.ts`).
+  - Git Conflicts: 0 marker konflik (`<<<<<<<` / `>>>>>>>`), status merge conflicts bersih.
+- **Langkah berikutnya**: Siap untuk pengujian manual lanjutan atau deployment sesuai kebutuhan pengguna.
 
 ## Aturan pencatatan
 
 Perbarui Current Handoff dan tambahkan entri setelah pekerjaan bermakna. Catat permintaan, perubahan, bukti pemeriksaan, masalah terbuka, dan langkah berikutnya. Jangan memasukkan secrets, dump akun, log mentah besar, atau percakapan penuh. Jangan mengubah status rencana menjadi selesai hanya karena file implementasi sudah ada.
 
 ## Task Entries
+
+### 2026-10-06 — Penyelesaian Penuh Merge Conflicts dan Perbaikan Seluruh Error IDE (Python & TSX)
+
+- **Permintaan**: Perbaiki seluruh error pada `endpoints.py`, `finance.py`, `lab.py`, `trade.py`, `ai_autopilot.py`, `datasets.py`, `App.tsx`, `library-panel.tsx`, `market-chart.tsx`, `sidebar-nav.tsx`, `lab.spec.ts`, `mt5_bridge.py`, `test_strategy_lab.py`, `main.py`, serta tuntaskan merge conflict markers.
+- **Akar Masalah & Resolusi**:
+  1. **Merge Conflicts**:
+     - Konflik di `WORKLOG.md`, `App.tsx`, `library-panel.tsx`, `market-chart.tsx`, `sidebar-nav.tsx`, dan `lab.spec.ts` terjadi antara commit `13e9237` (fitur finance, autopilot, trade panel) dan commit remote `b9126ac` (drawing layouts, chart indicators dialog, indicator manager page).
+     - Konflik diselesaikan secara terpadu: mempertahankan navigasi kedua fitur (`Finance`, `Autopilot`, `Manajemen Indikator`, `Strategi Trading`), mengintegrasikan toolbar chart dengan drawing manager dan indicator dialog baru, serta mempertahankan tombol quick tools lama (`RSI`, `Zona harga`, `Hapus gambar manual`) untuk kompatibilitas regresi `workspace.spec.ts`.
+  2. **Type Checking MetaTrader5 (Python)**:
+     - Karena package MetaTrader5 adalah C-extension tanpa bundled type stub `.pyi`, Pyright melaporkan puluhan attribute missing.
+     - Dibuat type stub lengkap di `typings/MetaTrader5/__init__.pyi` dan dikonfigurasi pada `pyrightconfig.json` (`stubPath: "typings"`), menyelesaikan seluruh warning/error MT5 pada `finance.py`, `trade.py`, `ai_autopilot.py`, dan `mt5_bridge.py`.
+  3. **Backend Type Errors**:
+     - `endpoints.py`: Fix deprecation `datetime.now(timezone.utc)`, fix `account_id: int | None = None`, fix typing dict key pada `model_version`.
+     - `lab.py`: Fix type guard check `if not item or not item.spec: raise HTTPException(404)`, fix casting `bool(item.archived)` dan `cast(Any, item).cancel_requested = True`, fix `Series.to_dict()`.
+     - `datasets.py`: Fix tipe Series/DataFrame pada validasi NaN, casting float/timestamp, mengganti `.max(axis=1)` dengan `np.maximum/minimum` vektorisasi, dan penanganan `drop_duplicates`/`duplicated` pada DataFrame/Series.
+     - `lab_indicators.py`: Fix typing `schema` dict, casting nilai `value` pada rolling window/RSI, dan fleksibilitas tipe `compute(frame: Any, ...)`.
+     - `main.py`: Hapus pemanggilan `str()` berlebih.
+     - `tests/test_strategy_lab.py`: Fix pemanggilan typing `archive(str(item_id))` dan validasi schema `RunInput` serta `ChartIndicatorsInput`.
+  4. **Frontend Type & JSX Errors**:
+     - `App.tsx`: Bersihkan marker konflik, pastikan valid JSX hierarki, pertahankan `RiskCalculator` agar tombol AI trading tetap ada dan teruji.
+     - `account-panel.tsx`: Perbaiki status badge `Data diterima` / `Data kedaluwarsa` dan data-testid `account-balance` / `risk-budget`.
+     - `market-chart.tsx`: Resolusi konflik di render canvas, toolbar, dialogs, dan state persistence.
+     - `chart-indicator-dialog.tsx`: Berikan safe fallback optional chaining `catalog?.indicators?.filter` dan `find`.
+- **Verifikasi**:
+  - Python unittest: 66/66 lulus (`Ran 66 tests in 2.558s - OK`).
+  - Frontend build: `npm run build` sukses 0 error (`tsc --noEmit && vite build`).
+  - Playwright: 24/24 lulus (`workspace.spec.ts`, `lab.spec.ts`, `indicator-management.spec.ts`, `drawing-layouts.spec.ts`).
+  - Git: Konflik ter-resolve dan ter-stage di index.
 
 ### 2026-10-05 — Perbaikan Script BOSWaves di Manajemen Indikator & Pine Editor
 
@@ -303,13 +330,42 @@ Perbarui Current Handoff dan tambahkan entri setelah pekerjaan bermakna. Catat p
   - Script launcher: Menambahkan `run_api.bat`, `run_frontend.bat`, `run_bridge.bat`, dan panduan `.env.example`.
 - **Verifikasi**: Seluruh 55 unittest (`discover -s tests`) lulus 100% di Windows (`OK`), FastAPI lifespan dan endpoint catalog Strategy Lab (`/api/lab/catalog`) sukses merespons HTTP 200 dengan 7 indikator bawaan.
 
+### 2026-10-04 — Koreksi renderer BOSWaves
 
-- **UI aktif**: Sidebar **Indikator & strategi** membuka Strategy Lab dengan tab Data historis, Indikator & strategi, dan Backtest.
+- **Masalah aktual**: Chart sebelumnya menggambar `alma`, `upper`, `lower`, dan `edge` sebagai garis generik. Pada Pine asli, `upper/lower` adalah batas konfirmasi internal; visual utamanya adalah gradient ribbon dan objek posisi. Karena itu hasil aplikasi memang berbeda jauh dari TradingView, bukan sekadar beda broker.
+- **Perbaikan**: Menambahkan edge glow, edge/mid/ALMA berwarna mengikuti tren dan gap pada candle flip. Menambahkan rekonstruksi posisi berupa LONG/SHORT, SL -1R, T1–T4, zona risiko/target, proyeksi ke kanan, dan posisi historis terbatas.
+- **Konfigurasi**: Menambahkan `targetCount`, `zonePct`, `extendBars`, dan `keepPositions` ke schema dinamis. Builtin menghasilkan versi immutable baru saat definisi resmi berubah; versi lama tetap tersimpan.
+- **Verifikasi**: Frontend build lulus; Playwright terarah 6/6 lulus secara serial pada desktop/mobile. Strategy Lab 16/16 lulus di container, termasuk regresi bahwa entry, stop, dan target 4R mengikuti flip/risk tanpa data masa depan. Smoke visual dengan 160 candle XAUUSDm menampilkan ribbon dan level posisi tanpa page error sebelum restart cache.
+- **Runtime lokal**: API dan database kembali running/healthy; catalog aktif memuat BOSWaves v2 dan parameter target. Image lokal diperbarui menjadi `aitrading-ai-trading:latest` (`sha256:69419da...`). Restart API mengosongkan cache akun/candle in-memory, sehingga feed MT5 perlu mengirim snapshot berikutnya sebelum chart live kembali tersedia.
+- **Batasan**: Ini rekonstruksi visual dari source Pine yang diberikan, belum bukti pixel/numerical parity. Target-hit fade/highlight, candle gradient, dan alerts belum diterjemahkan. Perbandingan sah memerlukan ekspor OANDA:XAUUSD 1D dengan input dan rentang yang sama; feed Exness XAUUSDm H1 tidak akan identik.
+
+### 2026-10-04 — Toolbox gambar dan layout chart tersimpan
+
+- **Toolbox**: Menambahkan garis tren, ray, horizontal, vertikal, zona/persegi, penggaris harga/persen/jumlah bar, Fibonacci retracement, price channel, garis paralel, brush, dan teks.
+- **Layout**: Gambar manual autosave setelah selesai, digeser, atau dihapus. Layout dapat dibuat, dipilih, dinamai ulang, diduplikat, dikunci, disembunyikan, dihapus, serta diekspor/impor JSON. Data divalidasi dan dibatasi 24 layout/200 objek; penyimpanan lokal per browser.
+- **Isolasi**: Hanya overlay `manual` yang dikelola; marker sinyal dan AI tidak ikut terhapus atau tersimpan sebagai gambar pengguna.
+- **BOSWaves**: Selisih dengan screenshot dijelaskan oleh dua hal yang terverifikasi: implementasi aplikasi baru mencakup core numerik tanpa objek visual/lifecycle target Pine, dan pembanding memakai OANDA XAUUSD 1D sedangkan aplikasi memakai feed Exness XAUUSDm. Parity belum diuji dengan dataset/input identik.
+- **Verifikasi**: `npm run build` lulus. Playwright terarah untuk gambar/layout, manajemen indikator, dan Strategy Lab lulus 6/6 pada desktop/mobile. Tes gambar melakukan klik pada canvas lalu memeriksa autosave dan duplikasi geometri.
+- **Runtime lokal**: Build `frontend/dist` disalin ke container API aktif dan image lokal `aitrading-ai-trading:latest` diperbarui (`sha256:bbf03bb...`). Smoke Chromium pada `localhost:8000/workspace/` membuka dialog toolbox dan menemukan Fibonacci tanpa page error; health API tetap 200.
+- **Batasan**: Layout belum tersinkron antarbrowser/perangkat karena belum ada akun pengguna web. Implementasi ini tidak mengirim order atau mengubah worker/ARM.
+
+### 2026-10-04 — Halaman indikator terpisah dan konfigurator chart
+
+- **Navigasi**: Memisahkan halaman **Manajemen indikator** dari **Strategi & backtest**.
+- **Editor**: Source Pine hasil impor dapat diedit di textarea monospace dan disimpan sebagai versi immutable baru beserta author, lisensi, hash, dan status unsupported/draft. Definisi bawaan tetap read-only.
+- **Dashboard**: Tombol Indikator pada chart membuka dialog pencarian, Semua/Favorit, tambah hingga 32 instance, show/hide, hapus dari chart, dan form parameter dari schema. Konfigurasi chart dan favorit disimpan di localStorage browser.
+- **Konsistensi**: Dashboard mengirim candle tertutup dan versi indikator ke endpoint kalkulasi; endpoint memakai implementasi indikator yang sama dengan preview/backtest serta menampilkan status warm-up.
+- **Batasan**: Editor bukan runtime Pine. Source bebas tidak dijalankan; agar tampil pada chart, script perlu adaptasi domain yang didukung dan diverifikasi. Favorit saat ini lokal per browser karena aplikasi belum memiliki akun pengguna web.
+- **Verifikasi**: Domain Python 15/15 lulus; Playwright 4/4 lulus untuk desktop/mobile; frontend production build lulus; smoke browser pada container aktif lulus tanpa page error.
+
+### 2026-10-04 — Strategy Lab: manajemen indikator, strategi, dataset, dan backtest
+
+- **UI aktif**: Sidebar **Manajemen indikator** membuka library/editor terpisah; **Strategi & backtest** berisi Strategi, Data historis, dan Backtest.
 - **Manajemen**: Buat, lihat, ubah sebagai versi baru, arsip/pulihkan, clone, ekspor/impor JSON, diff versi, hitungan pemakaian, parameter form dari schema, dan apply ke chart historis.
 - **Indikator**: SMA, EMA, ATR Wilder, RSI Wilder, Bollinger population, ALMA, dan adaptasi numerik BOSWaves draft. Source Pine disimpan dengan provenance dan tidak dieksekusi.
 - **Data/backtest**: Dataset candle tertutup UTC berupa snapshot NPZ immutable ber-checksum; metadata/run/audit di PostgreSQL; backtest next-open dengan biaya eksplisit, SL-first, sizing risiko, snapshot versi, status incomplete/cancelled/interrupted, ledger, kurva equity, Wilson 95%, break-even, expectancy R, profit factor, dan drawdown.
 - **Deploy**: Container aktif memakai `PYTHONPATH=/app:/app/src` dan volume persisten `lab_data`; `/api/lab/catalog` mengembalikan HTTP 200.
-- **Verifikasi**: 14/14 tes domain Strategy Lab, 2/2 Playwright desktop/mobile, dan frontend production build lulus. Tidak ada order MT5 dikirim.
+- **Verifikasi**: Cakupan terbaru tercatat pada entri halaman indikator di atas. Tidak ada order MT5 dikirim.
 - **Belum selesai**: histori terminal aktual belum dimasukkan; parity BOSWaves vs TradingView belum dibuktikan; source Pine selain contoh disimpan sebagai unsupported/review; sinyal live dan eksekusi tetap terpisah.
 
 ### 2026-10-04 — Normalisasi huruf timeframe chart

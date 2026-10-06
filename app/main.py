@@ -57,7 +57,7 @@ app.add_middleware(DiagnosticMiddleware)
 @app.exception_handler(StarletteHTTPException)
 async def diagnostic_http_error(request: Request, exc: StarletteHTTPException):
     # Classify known failures without copying exception messages or payload values.
-    detail = str(exc.detail).lower()
+    detail = exc.detail.lower() if isinstance(exc.detail, str) else str(exc.detail).lower()
     if 'belum ada data akun' in detail:
         reason = 'Akun belum diterima dari EA. Compile/pasang EA v1.3 dan periksa URL WebRequest.'
     elif 'no mt5 candles' in detail:

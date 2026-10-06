@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from urllib.error import URLError, HTTPError
 
 import pandas as pd
+from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.db.session import get_db
 from app.lab.models import LabItem, LabVersion, LabRun, LabAudit
-from app.lab.schemas import ItemInput, DatasetInput, ImportSource, RunInput, PreviewInput, HistoryRequest
+from app.lab.schemas import ItemInput, DatasetInput, ImportSource, RunInput, PreviewInput, HistoryRequest, ChartIndicatorsInput
 from app.lab import datasets, service, jobs
 from trading_agent.lab_indicators import REGISTRY
 from trading_agent.lab_rules import evaluate_indicators, signals
@@ -47,6 +48,12 @@ def import_indicator(payload: ImportSource, db: Session = Depends(get_db)):
     return checked(lambda: service.import_pine(db, payload))
 
 
+@router.put('/indicators/{item_id}/source')
+def update_indicator_source(item_id: str, payload: ImportSource, db: Session = Depends(get_db)):
+    """Store edited Pine as a new immutable version; source is never executed."""
+    return checked(lambda: service.update_pine(db, item_id, payload))
+
+
 @router.get('/example-source')
 def example_source():
     return Response(service.SOURCE_PATH.read_text(encoding='utf-8'), media_type='text/plain', headers={'Content-Disposition': 'attachment; filename="BOSWaves.pine"'})
@@ -67,6 +74,7 @@ def clone_item(item_id: str, payload: ItemInput, db: Session = Depends(get_db)):
     item = db.get(LabItem, item_id)
     if not item: raise HTTPException(404, 'Item tidak ditemukan.')
     version = db.query(LabVersion).filter_by(item_id=item.id).order_by(LabVersion.number.desc()).first()
+    if not version: raise HTTPException(404, 'Versi item tidak ditemukan.')
     return checked(lambda: service.save(db, item.kind, payload.name, version.spec, trusted=True))
 
 
@@ -164,9 +172,29 @@ def preview(payload: PreviewInput, db: Session = Depends(get_db)):
         start = max(0, len(frame)-2000)
         lines = {key: [None if pd.isna(v) else float(v) for v in series.iloc[start:]]
                  for key, series in outputs.items() if '.' in key}
-        return dict(candles=frame.iloc[start:].to_dict('records'), lines=lines, instances=instances, warmup_bars=required,
+        start_frame = cast(pd.DataFrame, frame.iloc[start:])
+        return dict(candles=start_frame.to_dict(orient='records'), lines=lines, instances=instances, warmup_bars=required,
                     dataset_id=dataset.spec['dataset_id'], symbol=dataset.spec['symbol'], interval=dataset.spec['interval'],
                     note='Pratinjau dataset historis; bukan feed live. Maksimal 2.000 bar terakhir; perhitungan memakai seluruh dataset.')
+    return checked(calculate)
+
+
+@router.post('/indicators/calculate')
+def calculate_chart_indicators(payload: ChartIndicatorsInput, db: Session = Depends(get_db)):
+    """Calculate configured indicators for dashboard candles using the shared domain implementation."""
+    def calculate():
+        frame = pd.DataFrame([bar.model_dump() for bar in payload.candles])
+        if frame.time.duplicated().any() or not frame.time.is_monotonic_increasing:
+            raise ValueError('Candle dashboard harus unik dan berurutan naik.')
+        instances = service.resolve_instances(db, payload.indicators)
+        outputs, required = evaluate_indicators(frame, instances)
+        lines = {key: [None if pd.isna(value) else float(value) for value in series]
+                 for key, series in outputs.items() if '.' in key}
+        return dict(lines=lines, instances=instances, warmup_bars=required,
+                    ready=len(frame) > required, candles=len(frame), symbol=payload.symbol,
+                    interval=payload.interval,
+                    note=(f'Valid setelah warm-up {required} candle tertutup.' if len(frame) > required
+                          else f'Belum valid: perlu >{required} candle tertutup; tersedia {len(frame)}.'))
     return checked(calculate)
 
 
