@@ -16,17 +16,21 @@ import { SidebarNav, type TabType } from "@/components/sidebar-nav";
 import { SymbolDialog } from "@/components/symbol-dialog";
 import { WorkspaceHeader } from "@/components/workspace-header";
 import { RiskCalculator } from "@/components/risk-calculator";
+import { DeepAnalysisModal } from "@/components/deep-analysis-modal";
 
 import { useMarketData } from "@/hooks/useMarketData";
 import { useAccountData } from "@/hooks/useAccountData";
 import { useSummaryData } from "@/hooks/useSummaryData";
 import { useAiAnalysis } from "@/hooks/useAiAnalysis";
+import { useStrategyPlans } from "@/hooks/useStrategyPlans";
 import { getJson, number, type Signal } from "@/lib/api";
+import type { StrategyPlanItem } from "@/types/strategy";
 import { cn } from "@/lib/utils";
 
 const intervals = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const LabPanel = lazy(() => import("@/components/lab/lab-panel").then(m => ({default: m.LabPanel})));
 const IndicatorManagerPage = lazy(() => import("@/components/lab/indicator-manager-page").then(m => ({default: m.IndicatorManagerPage})));
+const StrategyManagementPage = lazy(() => import("@/components/strategy-management-page").then(m => ({default: m.StrategyManagementPage})));
 
 const MarketChart = lazy(() =>
   import("@/components/market-chart").then((module) => ({
@@ -49,6 +53,8 @@ export default function App() {
   const accountQuery = useAccountData();
   const summary = useSummaryData();
   const { data: aiAnalysis, loading: aiAnalyzing, error: aiError, runAnalysis } = useAiAnalysis();
+  const [deepAnalysisOpen, setDeepAnalysisOpen] = useState(false);
+  const { savePlan } = useStrategyPlans();
 
   const health = useQuery({
     queryKey: ["health"],
@@ -56,13 +62,50 @@ export default function App() {
     refetchInterval: 30_000,
   });
 
-  async function handleRunAiAnalysis() {
+  async function handleRunAiAnalysis(agents?: string[]) {
     try {
-      await runAnalysis(symbol, interval);
+      await runAnalysis(symbol, interval, agents);
     } catch {
       // Handled inside hook state
     }
   }
+
+  const handleSaveStrategy = async (plan: StrategyPlanItem) => {
+    if (!aiAnalysis) return;
+    await savePlan({
+      title: `${aiAnalysis.symbol} – ${plan.name}`,
+      symbol: aiAnalysis.symbol,
+      interval: aiAnalysis.interval,
+      bias: plan.direction === 'BUY' ? 'BULLISH' : 'BEARISH',
+      status: 'active',
+      payload: {
+        title: `${aiAnalysis.symbol} – ${plan.name}`,
+        symbol: aiAnalysis.symbol,
+        interval: aiAnalysis.interval,
+        date_str: aiAnalysis.date_str,
+        last_price: aiAnalysis.last_price ?? plan.entry,
+        bias: aiAnalysis.bias,
+        confidence: aiAnalysis.confidence,
+        key_resistance: aiAnalysis.key_resistance,
+        key_support: aiAnalysis.key_support,
+        record_change: aiAnalysis.record_change,
+        summary: aiAnalysis.summary,
+        conclusion: aiAnalysis.conclusion || '',
+        fundamental: aiAnalysis.fundamental || [],
+        technical: aiAnalysis.technical || [],
+        volume: aiAnalysis.volume || '',
+        seasonality_and_timing: aiAnalysis.seasonality_and_timing || {
+          seasonality: '',
+          trading_hours_wib: '',
+          economic_calendar: '',
+        },
+        plans: aiAnalysis.plans || [plan],
+        invalidation: aiAnalysis.invalidation || '',
+        disclaimer: aiAnalysis.disclaimer,
+        visual_data: aiAnalysis.visual_data,
+      },
+    });
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 10_000);
@@ -186,7 +229,14 @@ export default function App() {
                   <AiAutopilotCard symbol={symbol} interval={interval} />
                   <TradePanel symbol={symbol} currentPrice={last?.close} account={account} />
                   <RiskCalculator account={account} />
-                  <AiAnalystCard aiAnalysis={aiAnalysis} aiAnalyzing={aiAnalyzing} aiError={aiError} onRunAnalysis={handleRunAiAnalysis} />
+                  <AiAnalystCard
+                    aiAnalysis={aiAnalysis}
+                    aiAnalyzing={aiAnalyzing}
+                    aiError={aiError}
+                    onRunAnalysis={handleRunAiAnalysis}
+                    onOpenDeepAnalysis={() => setDeepAnalysisOpen(true)}
+                    onSaveToStrategyManager={handleSaveStrategy}
+                  />
                 </div>
               </div>
             )}
@@ -205,8 +255,17 @@ export default function App() {
               </Suspense>
             )}
             {activeTab === "strategies" && (
-              <Suspense fallback={<p className="text-sm text-muted-foreground">Memuat Strategi Trading…</p>}>
-                <LabPanel mode="strategies" />
+              <Suspense fallback={<p className="text-sm text-muted-foreground">Memuat Manajemen Strategi…</p>}>
+                <StrategyManagementPage
+                  onSelectPlanToWorkspace={(sym) => {
+                    setSymbol(sym);
+                    setActiveTab("workspace");
+                  }}
+                  onOpenTradeExecution={(sym) => {
+                    setSymbol(sym);
+                    setActiveTab("workspace");
+                  }}
+                />
               </Suspense>
             )}
             {activeTab === "lab" && (
@@ -221,6 +280,22 @@ export default function App() {
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} account={account} stale={stale} />
 
       <SymbolDialog open={searchOpen} onOpenChange={setSearchOpen} currentSymbol={symbol} onSelectSymbol={chooseSymbol} />
+
+      <DeepAnalysisModal
+        open={deepAnalysisOpen}
+        onClose={() => setDeepAnalysisOpen(false)}
+        analysis={aiAnalysis}
+        marketCandles={marketData?.candles}
+        onSaveStrategy={handleSaveStrategy}
+        onApplyToWorkspace={() => {
+          if (aiAnalysis?.symbol) setSymbol(aiAnalysis.symbol);
+          setActiveTab("workspace");
+        }}
+        onOpenTrade={() => {
+          if (aiAnalysis?.symbol) setSymbol(aiAnalysis.symbol);
+          setActiveTab("workspace");
+        }}
+      />
     </div>
   );
 }

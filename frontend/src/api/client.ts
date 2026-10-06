@@ -68,3 +68,35 @@ export async function apiPost<T, D = unknown>(
 
   return response.json() as Promise<T>
 }
+
+export async function apiDelete<T>(
+  url: string,
+  signal?: AbortSignal,
+  options?: ApiRequestOptions,
+): Promise<T> {
+  const timeout = options?.timeoutMs ?? 12_000
+  const fetchSignal = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
+    : AbortSignal.timeout(timeout)
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...options?.headers,
+    },
+    signal: fetchSignal,
+  })
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    const message =
+      typeof body?.detail === 'string'
+        ? body.detail
+        : `Layanan tidak tersedia (HTTP ${response.status}).`
+    throw new Error(message)
+  }
+
+  return response.json() as Promise<T>
+}
+

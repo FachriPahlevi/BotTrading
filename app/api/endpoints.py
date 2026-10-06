@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -18,8 +19,18 @@ from app.engines import regime_engine, calibration_engine
 from app.engines.ai_analyst import analyze_market_chart
 from app.diagnostics import SESSION_ID
 
+from app.services.candle_cache import (
+    candle_cache_service,
+    market_cache_adapter,
+    compute_market_payload,
+    _add_trade_markers,
+    _series_value,
+)
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
-market_cache = {}
+market_cache = market_cache_adapter
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -37,66 +48,8 @@ def _iso_datetime(value):
     return value.isoformat()
 
 
-def _series_value(value):
-    if pd.isna(value):
-        return None
-    return round(float(value), 6)
-
-
-def _add_trade_markers(payload):
-    """Mark MACD line crossovers so the chart can show historical trade cues."""
-    candles = payload.get("candles", [])
-    for index, candle in enumerate(candles):
-        candle["trade_signal"] = None
-        if index == 0:
-            continue
-        previous = candles[index - 1]
-        values = (previous.get("macd"), previous.get("macd_signal"), candle.get("macd"), candle.get("macd_signal"))
-        if not all(value is not None for value in values):
-            continue
-        previous_macd, previous_signal, macd, macd_signal = values
-        if previous_macd <= previous_signal and macd > macd_signal:
-            candle["trade_signal"] = "BUY"
-        elif previous_macd >= previous_signal and macd < macd_signal:
-            candle["trade_signal"] = "SELL"
-    return payload
-
-
 def _build_market_payload(symbol, interval, candles):
-    frame = pd.DataFrame(candles)
-    required = {"time", "open", "high", "low", "close"}
-    if not required.issubset(frame.columns):
-        raise HTTPException(status_code=422, detail="Candles must include time, open, high, low, and close")
-
-    # Sort chronologically and drop duplicate timestamps
-    frame = frame.sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
-
-    for column in ("open", "high", "low", "close", "volume"):
-        if column not in frame:
-            frame[column] = 0
-        frame[column] = pd.to_numeric(frame[column])
-
-    frame["sma_20"] = frame.close.rolling(20, min_periods=1).mean()
-    frame["ema_50"] = frame.close.ewm(span=50, adjust=False).mean()
-    standard_deviation = frame.close.rolling(20, min_periods=1).std(ddof=0).fillna(0)
-    frame["bb_upper"] = frame.sma_20 + (standard_deviation * 2)
-    frame["bb_lower"] = frame.sma_20 - (standard_deviation * 2)
-    delta = frame.close.diff()
-    gains = delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
-    losses = (-delta.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean()
-    rs = gains / losses.replace(0, float("nan"))
-    frame["rsi_14"] = 100 - (100 / (1 + rs))
-    frame.loc[(losses == 0) & (gains > 0), "rsi_14"] = 100
-    frame.loc[(losses == 0) & (gains == 0), "rsi_14"] = 50
-    frame["rsi_14"] = frame["rsi_14"].fillna(50)
-    frame["macd"] = frame.close.ewm(span=12, adjust=False).mean() - frame.close.ewm(span=26, adjust=False).mean()
-    frame["macd_signal"] = frame.macd.ewm(span=9, adjust=False).mean()
-
-    fields = ("time", "open", "high", "low", "close", "volume", "sma_20", "ema_50", "bb_upper", "bb_lower", "rsi_14", "macd", "macd_signal")
-    normalized = []
-    for item in frame.to_dict("records"):
-        normalized.append({key: int(item[key]) if key == "time" else _series_value(item[key]) for key in fields})
-    return _add_trade_markers({"symbol": symbol, "interval": interval, "provider": "HFM MetaTrader 5", "updated_at": datetime.now(timezone.utc).isoformat(), "candles": normalized})
+    return compute_market_payload(symbol, interval, candles)
 
 
 @router.post("/mt5/candles")
@@ -106,18 +59,25 @@ def receive_mt5_candles(payload: dict):
     candles = payload.get("candles", [])
     if not symbol or interval not in {"1m", "5m", "15m", "1h", "4h", "1d"}:
         raise HTTPException(status_code=422, detail="Invalid symbol or interval")
-    if not isinstance(candles, list) or len(candles) < 60:
-        raise HTTPException(status_code=422, detail="At least 60 candles are required")
-    market_cache[(symbol, interval)] = {
-        "timestamp_received": datetime.now(timezone.utc).timestamp(),
-        "payload": _build_market_payload(symbol, interval, candles[-500:])
+    if not isinstance(candles, list) or len(candles) < 1:
+        raise HTTPException(status_code=422, detail="Candles list cannot be empty")
+
+    received_count, stored_count = candle_cache_service.upsert_candles(symbol, interval, candles)
+    return {
+        "success": True,
+        "status": "accepted",
+        "symbol": symbol,
+        "interval": interval,
+        "received": received_count,
+        "stored": stored_count,
+        "candles": received_count,
+        "instance_id": SESSION_ID,
     }
-    return {"status": "accepted", "candles": len(candles), "instance_id": SESSION_ID}
 
 
 @router.get("/market/chart")
 def get_market_chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int = 500):
-    """Proxy XAUUSD / XAUUSDm candles from a local bridge connected to MetaTrader 5."""
+    """Proxy XAUUSD / XAUUSDm candles from in-memory candle cache or Python bridge."""
     symbol = symbol.strip()
     interval = interval.strip().lower()
     allowed_intervals = {"1m", "5m", "15m", "1h", "4h", "1d"}
@@ -126,53 +86,16 @@ def get_market_chart(symbol: str = "XAUUSDm", interval: str = "1h", limit: int =
     if interval not in allowed_intervals:
         raise HTTPException(status_code=400, detail="Unsupported interval")
 
-    limit = max(60, min(limit, 1000))
+    limit = max(1, min(limit, 1000))
     bridge_url = os.getenv("MT5_BRIDGE_URL", "").rstrip("/")
     if not bridge_url:
-        sym_upper = symbol.upper()
-        # 1. Exact match (symbol & interval)
-        cached_entry = market_cache.get((sym_upper, interval))
-
-        # 2. Flexible symbol alias matching for exact interval
-        if not cached_entry:
-            for (cached_symbol, cached_interval), entry in market_cache.items():
-                if cached_interval == interval:
-                    c_upper = cached_symbol.upper()
-                    if (
-                        (sym_upper in {"XAUUSD", "XAUUSDM", "GOLD"} and c_upper in {"XAUUSD", "XAUUSDM", "GOLD"})
-                        or c_upper.rstrip("M") == sym_upper.rstrip("M")
-                    ):
-                        cached_entry = entry
-                        break
-
-        if cached_entry:
-            age = datetime.now(timezone.utc).timestamp() - cached_entry["timestamp_received"]
-            if age <= 60:
-                return cached_entry["payload"]
-            else:
-                detail = f"Cached data for {symbol} ({interval}) is stale ({int(age)}s old)."
-                raise HTTPException(status_code=503, detail=detail)
-
-        received_markets = [
-            (cached_symbol, cached_interval,
-             datetime.now(timezone.utc).timestamp() - entry["timestamp_received"])
-            for (cached_symbol, cached_interval), entry in sorted(market_cache.items())
-        ]
-        detail = f"No MT5 candles received for {symbol} ({interval}) yet."
-        if received_markets:
-            market_summary = ", ".join(
-                f"{cached_symbol} ({cached_interval}, {max(0, int(age))}s old)"
-                for cached_symbol, cached_interval, age in received_markets
-            )
-            has_fresh = any(0 <= age <= 60 for _, _, age in received_markets)
-            detail = (
-                f"MT5 cache has {'fresh' if has_fresh else 'stale'} candles for {market_summary}, but not {symbol} ({interval}). "
-                "Compile and attach AurumMarketBridge.mq5 v1.3, then check Experts/Log sistem for every timeframe."
-            )
-        raise HTTPException(
-            status_code=503,
-            detail=detail,
-        )
+        try:
+            return candle_cache_service.get_chart(symbol, interval, limit=limit)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Unexpected error while fetching chart for %s %s: %s", symbol, interval, exc)
+            raise HTTPException(status_code=500, detail=f"Internal chart error: {exc}")
 
     bridge_query = urlencode({"symbol": symbol, "interval": interval, "limit": limit})
     try:
@@ -196,8 +119,12 @@ def get_regime(symbol: str, db: Session = Depends(get_db)):
             for (cached_symbol, cached_interval), c_entry in market_cache.items():
                 if cached_interval == interval:
                     c_upper = cached_symbol.upper()
-                    if ((sym_upper in {"XAUUSD", "XAUUSDM", "GOLD"} and c_upper in {"XAUUSD", "XAUUSDM", "GOLD"})
-                        or c_upper.rstrip("M") == sym_upper.rstrip("M")):
+                    if (
+                        (sym_upper in {"XAUUSD", "XAUUSDM", "GOLD"} and c_upper in {"XAUUSD", "XAUUSDM", "GOLD"})
+                        or c_upper.rstrip("M") == sym_upper.rstrip("M")
+                        or ("XAU" in sym_upper and "XAU" in c_upper)
+                        or ("GOLD" in sym_upper and "GOLD" in c_upper)
+                    ):
                         entry = c_entry
                         break
         
@@ -410,7 +337,11 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
 
 
 @router.get("/ai/analyze")
-def get_ai_analysis(symbol: str = "XAUUSDm", interval: str = "1h"):
+def get_ai_analysis(
+    symbol: str = "XAUUSDm",
+    interval: str = "1h",
+    agents: str = "all",
+):
     symbol = symbol.strip()
     interval = interval.strip().lower()
     allowed_intervals = {"1m", "5m", "15m", "1h", "4h", "1d"}
@@ -428,9 +359,11 @@ def get_ai_analysis(symbol: str = "XAUUSDm", interval: str = "1h"):
                 if (
                     (sym_upper in {"XAUUSD", "XAUUSDM", "GOLD"} and c_upper in {"XAUUSD", "XAUUSDM", "GOLD"})
                     or c_upper.rstrip("M") == sym_upper.rstrip("M")
+                    or ("XAU" in sym_upper and "XAU" in c_upper)
+                    or ("GOLD" in sym_upper and "GOLD" in c_upper)
                 ):
                     cached_entry = entry
                     break
 
     candles = cached_entry["payload"].get("candles", []) if cached_entry else []
-    return analyze_market_chart(symbol, interval, candles)
+    return analyze_market_chart(symbol, interval, candles, agents=agents)

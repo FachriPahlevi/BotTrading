@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, String, Numeric, Boolean, Date, Integer, ForeignKey, DateTime
+from sqlalchemy import Column, BigInteger, String, Numeric, Boolean, Date, Integer, ForeignKey, DateTime, Text
 from sqlalchemy.sql import func
 from app.db.session import Base
 
@@ -78,4 +78,19 @@ class TradeRecord(Base):
     status = Column(String(20), default="CLOSED")  # 'OPEN', 'CLOSED', 'PENDING'
     deal_time = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class StrategyPlanRecord(Base):
+    __tablename__ = "strategy_plans"
+
+    id = Column(String(50), primary_key=True, index=True)
+    title = Column(String(150), nullable=False)
+    symbol = Column(String(20), nullable=False, index=True)
+    interval = Column(String(10), nullable=False)
+    bias = Column(String(20), nullable=False)
+    status = Column(String(20), default="active")  # 'active', 'draft', 'archived'
+    payload = Column(Text, nullable=False)  # JSON serialized data
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
 

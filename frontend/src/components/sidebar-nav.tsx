@@ -30,7 +30,7 @@ const navItems = [
   { id: 'workspace', label: 'Trading workspace', icon: LayoutDashboard },
   { id: 'finance', label: 'Laporan Keuangan', icon: TrendingUp },
   { id: 'indicators', label: 'Manajemen Indikator', icon: SlidersHorizontal },
-  { id: 'strategies', label: 'Strategi Trading', icon: Sparkles },
+  { id: 'strategies', label: 'Manajemen Strategi', icon: Sparkles },
   { id: 'lab', label: 'Strategy Lab (Backtest)', icon: CandlestickChart },
   { id: 'activity', label: 'Sinyal & aktivitas', icon: Activity },
   { id: 'fundamental', label: 'Konteks pasar', icon: Layers3 },

@@ -18,8 +18,7 @@ def get_diagnostics(response: Response):
     markets = []
     # Copy keys to avoid iteration errors when the ingest thread adds a market.
     for (symbol, interval), entry in list(endpoints.market_cache.items()):
-        # Existing candle cache timestamps are naive UTC epoch; match its clock.
-        age = datetime.utcnow().timestamp() - entry['timestamp_received']
+        age = now.timestamp() - entry['timestamp_received']
         markets.append(dict(symbol=symbol, interval=interval, age_seconds=round(age, 1),
                             fresh=0 <= age <= 60))
     if python_bridge:

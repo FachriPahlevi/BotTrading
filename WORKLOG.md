@@ -4,23 +4,196 @@ Catatan kelanjutan sesi. Aturan kerja berada di [AGENTS.md](AGENTS.md), fakta te
 
 ## Current Handoff
 
-- **Permintaan aktif**: Memperbaiki semua error IDE/linter (Python & TypeScript) serta menyelesaikan merge conflicts yang terjadi di branch lokal.
-- **Status**: Selesai 100%. Semua konflik merge telah diselesaikan dengan menggabungkan fitur kedua branch tanpa regresi. Semua type error di backend (Pyright) dan frontend (TypeScript) telah diperbaiki (0 error).
+- **Permintaan aktif**: Refactor `app/engines/ai_analyst.py` agar analisis dihasilkan oleh daftar AI agent (Google Gemini AI, Anthropic Claude, Sistem Internal Rule-Based), bukan hardcode (Pembersihan tuntas H1–H7, penegakan R1–R12).
+- **Status**: Selesai diimplementasikan dan diverifikasi 100%.
+  1. H1–H7 diperbaiki tuntas: tidak ada lagi data tiruan (`XAUUSD_BENCHMARK_CANDLES`, `_build_gold_deep_analysis`, harga 4132/4215/4265 fiktif, tanggal/narasi tanpa sumber).
+  2. Arsitektur modular di `app/engines/agents/`: `registry.py` (R2), `models.py` (Pydantic), `metrics.py` (Wilder ATR 14 bar terakhir & EMA warmup R5/H5), `validation.py` (R7 & gerbang keputusan R10), `prompts.py` (R6/H4), `parser.py`, `gemini_agent.py`, `claude_agent.py`, `rule_based_agent.py` (skor terhitung R8), `orchestrator.py` (R9 konsensus jujur & thread pool).
+  3. UI frontend diperbarui: selector agen (Gemini, Claude, Internal, Semua), mode perbandingan berdampingan (`MultiAgentComparison`), dan tab switching di modal analisis mendalam.
+  4. Perbaikan `OSError: [Errno 22] Invalid argument` pada Windows: Helper tangguh `_format_candle_time` di `app/engines/ai_analyst.py` dan parsing aman `bar_time` di `orchestrator.py` menangani timestamp epoch detik, milidetik (ms dari MT5/cache), string ISO, maupun abnormal out-of-range tanpa crash.
+  5. Seluruh 84 unit test backend lulus (100% OK, termasuk 12 pengujian wajib di `tests/test_ai_analyst.py`).
+  6. Kualitas kode: `ruff` 0 error pada berkas terkait, `pyright` 0 error/warning, semua fungsi baru memiliki Radon Cyclomatic Complexity <= 10 dan baris <= 40 (memenuhi `CODE_QUALITY.md`).
+  7. Live testing endpoint `GET /api/ai/analyze?symbol=XAUUSDm&interval=1h&agents=gemini,claude,rule_based` diverifikasi sukses mengembalikan HTTP 200 OK.
+  8. Frontend build (`npm run build`) sukses tanpa error TypeScript/Vite.
+- **Catatan Terbuka Terkait Autopilot (H6)**:
+  - `ai_autopilot.py` dan jalur order sengaja TIDAK disentuh pada tugas ini (mematuhi R12).
+  - Autopilot saat ini masih membaca `bias` dan `confidence >= 60`. Respons root `confidence` sudah dijamin berupa angka hasil kalkulasi (0 bila gagal/tidak diketahui), bukan konstanta.
+  - Harus dialihkan ke `decision == "TRADE"` dan `tradable == True` pada tugas perbaikan autopilot terpisah (merujuk temuan F2/F6 di `AUDIT_REPORT.md`).
 - **Lokasi Terkait**:
-  - Backend: `app/api/endpoints.py`, `app/api/finance.py`, `app/api/lab.py`, `app/api/trade.py`, `app/engines/ai_autopilot.py`, `app/lab/datasets.py`, `app/lab/models.py`, `app/lab/service.py`, `app/main.py`, `mt5_bridge.py`, `tests/test_strategy_lab.py`, `typings/MetaTrader5/`.
-  - Frontend: `frontend/src/App.tsx`, `frontend/src/components/account-panel.tsx`, `frontend/src/components/chart-indicator-dialog.tsx`, `frontend/src/components/lab/library-panel.tsx`, `frontend/src/components/market-chart.tsx`, `frontend/src/components/sidebar-nav.tsx`, `frontend/tests/lab.spec.ts`.
-- **Hasil Verifikasi**:
-  - Python Unit Tests: 66/66 lulus 100% OK (`Ran 66 tests in 2.558s`).
-  - Frontend Build: `npm run build` sukses tanpa error (`tsc --noEmit && vite build` built in ~740ms).
-  - Playwright Tests: 24/24 lulus 100% OK di desktop & mobile (`workspace.spec.ts`, `lab.spec.ts`, `drawing-layouts.spec.ts`, `indicator-management.spec.ts`).
-  - Git Conflicts: 0 marker konflik (`<<<<<<<` / `>>>>>>>`), status merge conflicts bersih.
-- **Langkah berikutnya**: Siap untuk pengujian manual lanjutan atau deployment sesuai kebutuhan pengguna.
+  - Backend: [app/engines/ai_analyst.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/app/engines/ai_analyst.py), [app/engines/agents/](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/app/engines/agents/)
+  - Frontend: [frontend/src/components/ai-analyst-card.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/ai-analyst-card.tsx), [frontend/src/components/deep-analysis-modal.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/deep-analysis-modal.tsx), [frontend/src/components/multi-agent-comparison.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/multi-agent-comparison.tsx), [frontend/src/types/ai.ts](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/types/ai.ts)
+  - Tests: [tests/test_ai_analyst.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/tests/test_ai_analyst.py), [tests/test_ai_characterization.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/tests/test_ai_characterization.py)
 
 ## Aturan pencatatan
 
 Perbarui Current Handoff dan tambahkan entri setelah pekerjaan bermakna. Catat permintaan, perubahan, bukti pemeriksaan, masalah terbuka, dan langkah berikutnya. Jangan memasukkan secrets, dump akun, log mentah besar, atau percakapan penuh. Jangan mengubah status rencana menjadi selesai hanya karena file implementasi sudah ada.
 
 ## Task Entries
+
+### 2026-10-06 — Refactor AI Analyst Multi-Agent Architecture (Pembersihan Hardcode H1-H7 & Penegakan R1-R12)
+
+- **Permintaan**:
+  - Hapus seluruh data tiruan hardcoded (`XAUUSD_BENCHMARK_CANDLES`, `_build_gold_deep_analysis`, harga tetap 4132/4215/4265, narasi fundamental fiktif).
+  - Terapkan registry agent berbasis konfigurasi (`gemini`, `claude`, `rule_based`).
+  - Agent jujur bertipe `AgentResult` (status ok, failed, skipped). Dilarang menukar hasil agen gagal dengan rule-based.
+  - Perbaiki bug metrik (H5): Wilder ATR pada 14 bar tertutup terakhir, EMA 200 hanya valid bila candle >= 600 bar.
+  - Validasi rencana deterministik (R7) dan gerbang keputusan `TRADE | WAIT` (R10).
+  - Skor keyakinan `rule_based` dihitung dari pemenuhan checklist teknikal nyata, bukan konstanta 84 (R8).
+  - Konsensus jujur dihitung minimal dari 2 agent berstatus ok (R9).
+  - Rahasia API key hanya via header (bukan URL), tanpa `str(exc)` bocor ke respons (R11).
+  - UI frontend mendukung pemilihan agen (1, multiple, semua) dan mode perbandingan berdampingan (`MultiAgentComparison`).
+- **Implementasi**:
+  - Dibangun package modular `app/engines/agents/`:
+    - `registry.py`: master catalog `AgentSpec`.
+    - `models.py`: Pydantic models (`AgentResult`, `PlanModel`, `LevelModel`, `AnalysisContext`, `ConsensusResult`).
+    - `metrics.py`: Wilder ATR murni, EMA dengan warm-up guard, RSI-14 Wilder.
+    - `validation.py`: validasi level arah SL/TP, toleransi ATR, R:R >= 1.0, serta evaluasi gerbang keputusan.
+    - `prompts.py`: prompt analis kuantitatif versi 1 tanpa contoh harga fiktif, larang fundamental palsu.
+    - `parser.py`: shared response parser yang memetakan raw LLM output ke validated `AgentResult`.
+    - `http_client.py`: injected callable client untuk unit test offline tanpa jaringan nyata.
+    - `gemini_agent.py`: Google Gemini client via header `x-goog-api-key`.
+    - `claude_agent.py`: Anthropic Claude client via header `x-api-key`.
+    - `rule_based_agent.py`: internal deterministic agent dengan scoring checklist dinamis.
+    - `orchestrator.py`: thread pool execution, caching per candle bar, dan honest consensus.
+  - Refactor `app/engines/ai_analyst.py`:
+    - Disederhanakan dari 1.311 baris menjadi ~250 baris modular.
+    - Mengembalikan `status: "insufficient_data"` bila candle < 5.
+    - Kompatibilitas 100% terhadap field frontend existing (`plans`, `scenarios`, `chart_overlays`, `visual_data`, `rationale`).
+  - Frontend:
+    - `frontend/src/components/ai-analyst-card.tsx`: selector agen pill button, tab model switcher.
+    - `frontend/src/components/deep-analysis-modal.tsx`: tab mode switcher antara Matriks Perbandingan Agen dan Detail Analisis.
+    - `frontend/src/components/multi-agent-comparison.tsx`: tabel/kartu matriks perbandingan side-by-side.
+- **Verifikasi**:
+  - Backend Unit Tests: 83/83 passed (`OK`).
+  - 11 Pengujian Wajib di `tests/test_ai_analyst.py` lulus 100%.
+  - Coverage: meningkat dari baseline 46% menjadi 83% (dengan `ai_analyst.py` 99% coverage).
+  - Static Analysis: `ruff check` 0 error, `radon cc` seluruh fungsi baru <= 10 (Grade A & B), baris fungsi <= 40.
+  - Type Safety: `npx pyright` 0 error, `npm run build` sukses (767ms).
+
+### 2026-10-06 — Implementasi Initial + Incremental Candle Sync & Candle Cache Repository (MT5 EA & Backend)
+
+- **Permintaan**:
+  - Hentikan pengiriman 800 candle setiap 15 detik. Gunakan Initial Sync (800 candle per timeframe) saat start, lalu Incremental Sync (2 candle terbaru) setiap 15 detik.
+  - Refactor `AurumMarketBridge.mq5` agar memiliki mode `InitialSyncDone`, retry jika salah satu timeframe gagal, status boolean, dan input terpisah.
+  - Bangun `CandleCacheService` reusable (`app/services/candle_cache.py`) dengan upsert berbasis timestamp (replace jika timestamp sama, append jika baru), retensi max 800 candle, dan thread-safe concurrency lock.
+  - Integrasikan `GET /api/market/chart` ke cache repository tersebut (kembalikan `candles[-limit:]`), perbaiki response `POST /api/mt5/candles` (`received`, `stored`), dan atasi error 503 saat limit dinaikkan ke 800.
+- **Akar Masalah (Root Cause)**:
+  1. EA v1.3 memborbardir 800 candle x 6 timeframe (4.800 candle) secara synchronous setiap 15 detik, memicu lonjakan beban CPU/network dan timeout HTTP di terminal MT5.
+  2. Backend `endpoints.py` sebelumnya memiliki validasi keras `len(candles) < 60` yang langsung melempar 422 jika menerima update 2 candle incremental.
+  3. `market_cache` adalah dictionary global polos tanpa locking, dan saat request timeframe drop atau terlambat masuk > 60 detik, chart melempar generic 503 stale.
+- **Implementasi**:
+  - **EA MQL5 ([AurumMarketBridge.mq5](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/AurumMarketBridge.mq5))**:
+    - Versi diperbarui ke `2.0`.
+    - Input baru: `InitialCandleCount = 800`, `IncrementalCandleCount = 2`, `SyncIntervalSeconds = 15`.
+    - State `InitialSyncDone = false`. Pada `OnTimer()`, menjalankan Initial Sync untuk ke-6 timeframe (M1, M5, M15, H1, H4, D1). `InitialSyncDone` hanya disetel `true` jika seluruh 6 timeframe berhasil dikirim. Jika ada kegagalan, dicoba ulang pada siklus timer berikutnya tanpa crash.
+    - Setelah initial sync selesai, otomatis berpindah ke Incremental Sync (hanya mengirim 2 candle terbaru).
+    - `SendCandlesForTimeframe()` mengembalikan status boolean (`true`/`false`).
+  - **Candle Cache Repository ([app/services/candle_cache.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/app/services/candle_cache.py))**:
+    - Modul repository mandiri dengan `CandleCacheService` dan `MAX_CANDLE_HISTORY = 800`.
+    - `upsert_candles()` melakukan merge O(n) berbasis dictionary timestamp (Unix milliseconds): jika timestamp sama, atribut candle di-update; jika baru, di-append. Kemudian diurutkan ascending dan di-trim menjadi `candles[-800:]`.
+    - `compute_market_payload()` menghitung indikator teknikal (SMA-20, EMA-50, BB, RSI-14, MACD) secara konsisten dan efisien.
+    - Thread-safe dengan `threading.RLock()`.
+    - `market_cache_adapter` (LegacyMarketCacheDict) menyediakan wrapper transparan dua arah untuk modul lain (`diagnostics.py`, `trade.py`, `ai_autopilot.py`, unit tests).
+  - **API Endpoints ([app/api/endpoints.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/app/api/endpoints.py))**:
+    - `POST /api/mt5/candles`: Menerima update mulai dari 1 bar candle, memanggil `candle_cache_service.upsert_candles()`, mengembalikan `{success: true, status: "accepted", symbol, interval, received, stored, instance_id}`.
+    - `GET /api/market/chart`: Membaca langsung dari `candle_cache_service.get_chart(symbol, interval, limit=limit)`, mengembalikan `candles[-limit:]` dari 800 bar yang tersimpan. Error handling menyajikan detail kegagalan secara eksplisit dengan logging terstruktur.
+- **Verifikasi**:
+  - Test suite backend: `python -m unittest discover -s tests` lulus 75/75 (100% OK, termasuk 6 test baru di `tests/test_candle_cache.py`).
+  - Live server verification:
+    - POST 2 candle incremental: `{'success': True, 'status': 'accepted', 'received': 2, 'stored': 800}`.
+    - GET chart `limit=500`: `200 OK` mengembalikan 500 bar terbaru secara instan tanpa 503.
+
+### 2026-10-06 — Kalibrasi Dinamis Chart Strategi AI & Resolusi Penerimaan Candle MT5 (160 vs 500)
+
+- **Permintaan**:
+  1. Chart visual pada analisis strategi sebelumnya statik (menampilkan candle acuan Sep-Okt 2026). Pengguna menginginkan visual chart yang 100% dinamis mengikuti live candle MT5 aktif.
+  2. Investigasi mengapa MT5 mengirim 500 candle tetapi backend hanya mencatat/menerima 160 candle.
+- **Investigasi & Akar Masalah**:
+  - **Penyebab Candle 160**: Dari pemeriksaan log terminal MT5 (`MQL5\Logs\20261006.log`), pada jam 14:53–14:54 WIB EA yang terpasang pada chart aktif masih berjalan dengan parameter input lama `CandleCount = 160`. Di MetaTrader 5, perubahan nilai default `input` di file `.mq5` tidak otomatis menimpa parameter EA pada chart yang sedang berjalan kecuali pengguna menekan `F7` (Inputs) dan mengklik tombol "Reset", atau me-remove dan me-attach ulang EA. Pada jam 14:58 (setelah EA di-recompile dan input di-update), log MT5 mengonfirmasi bahwa EA berhasil mengirim 800 candle (`candles: 800`) dan backend merespons `{"status":"accepted","candles":800}`.
+  - **Kapasitas Cache Backend**: Di [app/api/endpoints.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/app/api/endpoints.py), payload market sebelumnya dipangkas `candles[-500:]`. Ini ditingkatkan menjadi `candles[-1000:]` agar seluruh bar yang dikirim MT5 tersimpan penuh.
+  - **Simbol Matcher**: Instrumen `XAUUSD247m` (Exness 24/7 Gold) dipetakan secara otomatis agar cocok dengan query `XAUUSDm` / `GOLD`.
+  - **Penyebab Chart Statik**: Fungsi `analyze_market_chart` sebelumnya menggunakan fallback acuan `_build_gold_deep_analysis` yang berisi 23 candle statik tanggal 7 Sep – 6 Okt 2026.
+- **Implementasi Solusi**:
+  - **Backend AI Engine ([app/engines/ai_analyst.py](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/app/engines/ai_analyst.py))**:
+    - Membangun `_build_dynamic_visual_data` dan `_generate_dynamic_plans` yang mengambil 25 bar candlestick terbaru langsung dari data MT5 aktif.
+    - Format label waktu (`_format_candle_label`) disesuaikan secara dinamis (HH:MM untuk timeframe intraday M1–H1, DD Mon untuk D1).
+    - Menghitung zona Support/Resistance, horizontal level, dan label pola candle langsung dari swing high/low 20 bar aktif.
+    - Skenario trading (Plan A, B, C, D) menghasilkan koordinat lintasan `price_path` yang bermula dari index candle terakhir (`last_idx`) diproyeksikan ke masa depan, baik saat diproses oleh Gemini AI cloud maupun deterministic engine.
+  - **Frontend SVG Chart ([frontend/src/components/deep-analysis-chart.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/deep-analysis-chart.tsx))**:
+    - Menerima prop `marketCandles` sebagai live fallback data.
+    - Menghitung `slotWidth` (SW) secara dinamis sesuai panjang bar candle (`candles.length`) dan lebar SVG canvas (980px).
+    - Grid harga vertikal dan label sumbu Y dihitung secara adaptif menyesuaikan volatilitas instrumen (emas, forex 5 desimal, kripto).
+  - **Frontend Modal ([frontend/src/components/deep-analysis-modal.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/components/deep-analysis-modal.tsx) & [frontend/src/App.tsx](file:///c:/Users/nurfa/Documents/Project%20Fachri/BotTrading/frontend/src/App.tsx))**:
+    - Meneruskan `marketData?.candles` dari state root ke modal dan chart analisis.
+- **Verifikasi**:
+  - Test suite backend: `python -m unittest discover -s tests` lulus 69/69 (100% OK, termasuk regresi baru `test_analyze_market_chart_dynamic_visual_data`).
+  - Frontend: `npm run build` berhasil tanpa error TypeScript / Vite (selesai dalam 758ms).
+  - Live Endpoint Test: `GET /api/market/chart?symbol=XAUUSDm&interval=1m` mengembalikan 800 bar aktif, dan `GET /api/ai/analyze?symbol=XAUUSDm&interval=1m` mengembalikan 25 bar candle sample terkini pada jam aktif dengan 4 skenario interaktif lengkap.
+
+### 2026-10-06 — Implementasi Penuh Analisis Chart Mendalam (HTML/PDF Parity) & Halaman Mandiri Manajemen Strategi
+
+- **Permintaan**:
+  1. Ketika tombol "Analisis chart aktif" diklik, output yang dihasilkan identik dengan dokumen HTML/PDF: memiliki kartu ringkasan (Harga terakhir, Bias, Resistance, Support, % rekor), layer visual chart yang bisa di-toggle (Zona S/R, Posisi trade, Skenario harga, EMA 10, Label candle), dan 6 bagian analisis mendalam (1. Kesimpulan, 2. Fundamental, 3. Teknikal & pola candle, 4. Volume, 5. Musim & waktu termasuk jam WIB dan kalender penting, 6. Tabel Rencana trading multi-skenario A, B, C, D).
+  2. Mendukung penyimpanan gambar/skenario multi-plan ala TradingView (Plan 1, Plan 2, dst.), bisa beralih plan di chart secara interaktif, dan menyediakan halaman baru khusus untuk **Manajemen Strategi**.
+- **Implementasi**:
+  - **Backend (`app/engines/ai_analyst.py`)**:
+    - Ditingkatkan untuk memproduksi skema analisis mendalam lengkap secara deterministik maupun terstruktur melalui Gemini AI (jika key tersedia).
+    - Memuat 4 skenario trading plan lengkap (Plan A: Sell retest utama, Plan B: Sell breakdown, Plan C: Buy bounce counter-trend, Plan D: Buy breakout), data visual overlay (zona support/resistance, horizontal levels, label pola candle, polyline lintasan proyeksi harga, 23 bar candle acuan).
+    - Menghitung EMA-10, EMA-14, SMA-20, ATR dinamis, dan kalkulasi risk-reward ratio presisi.
+  - **Backend API & Database (`app/api/strategy_plans.py` & `app/models/trading.py`)**:
+    - Model baru `StrategyPlanRecord` dengan kolom `id`, `title`, `symbol`, `interval`, `bias`, `status`, `payload` (JSON text), timestamp.
+    - Router `/api/strategy-plans` (GET, POST, GET by id, DELETE) dengan auto-seeding strategi acuan XAUUSD jika database kosong.
+    - Terpasang resmi di `app/main.py`.
+    - Unit tests komprehensif di `tests/test_strategy_plans.py` (2/2 lulus).
+  - **Frontend Vector Chart (`frontend/src/components/deep-analysis-chart.tsx`)**:
+    - Komponen SVG beresolusi tinggi 980x540 yang responsif dan interaktif:
+      - Sumbu harga dinamis dengan pembulatan step terkalibrasi.
+      - Candlestick interaktif dengan hover tooltip detail OHLC.
+      - Layer toggle independen: Zona S/R transparan dengan garis batas putus-putus, Posisi trade box SL/TP (area merah risiko dan hijau keuntungan), Skenario harga (polyline putus-putus dengan label langkah "1. Retest", "2. Breakdown"), Kurva tren EMA 10 oranye, Label candle penting ("Lower highs", "28 Sep breakdown", "Penolakan 4.226", "Doji di support"), serta garis harga terakhir dengan badge biru solid.
+  - **Frontend Deep Analysis Modal (`frontend/src/components/deep-analysis-modal.tsx`)**:
+    - Tampilan modal komprehensif mereplikasi 100% tata letak HTML/PDF:
+      - 5 Kartu Metrik Ringkas.
+      - Selector Skenario Plan Interaktif (Plan A, Plan B, Plan C, Plan D): saat diklik, langsung mengubah posisi trade box dan path harga pada chart secara realtime.
+      - Toolbar layer visual (Checkboxes toggle).
+      - Rincian lengkap 6 Bab Analisis (Kesimpulan, Fundamental, Teknikal, Volume, Musim & Jam WIB, Tabel Rencana Trading, Invalidasi & Manajemen Risiko modal).
+      - Tombol aksi: "Simpan Plan ke Manajemen Strategi", "Terapkan ke Workspace", dan "Eksekusi Order MT5".
+  - **Halaman Baru: Manajemen Strategi (`frontend/src/components/strategy-management-page.tsx`)**:
+    - Halaman baru mandiri yang diposisikan di navigasi sidebar (`#strategies`, label: **Manajemen Strategi**):
+      - KPI ringkasan: Total Strategi, Skenario SELL, Skenario BUY, Simbol aktif.
+      - Filter bar: Pencarian teks, filter bias (Semua, SELL, BUY), filter simbol.
+      - Kolom Kiri (Koleksi Strategi Tersimpan): Kartu strategi dengan badge arah, simbol, timeframe, rasio R:R, tanggal, tombol duplikasi & hapus.
+      - Kolom Kanan (Pratinjau Interaktif): Chart SVG mendalam dengan layer toggle, switcher skenario plan (Plan 1, Plan 2, dst.), dan 6 bab penjelasan analitik.
+      - Modal "Buat Strategi Baru": Formulir kustom untuk merancang strategi baru lengkap dengan auto-kalkulator R:R.
+      - Fitur Ekspor JSON dan integrasi langsung ke eksekusi MT5.
+  - **Komponen Pendukung & Integrasi**:
+    - `frontend/src/hooks/useStrategyPlans.ts`: Hook React Query dengan sinkronisasi REST API dan fallback persisten `localStorage`.
+    - `frontend/src/components/ai-analyst-card.tsx`: Ditambahkan switcher skenario plan internal, tombol "📊 Buka Analisis Mendalam Lengkap", dan "💾 Simpan Plan ke Manajemen Strategi".
+    - `frontend/src/App.tsx`: Menghubungkan seluruh modal, hook strategi, dan navigasi tab `strategies` ke `StrategyManagementPage`.
+- **Verifikasi**:
+  - Python unittests: 68/68 lulus 100% (`Ran 68 tests in 1.397s — OK`).
+  - Frontend production build: `npm run build` sukses 0 error (`tsc --noEmit && vite build` selesai dalam 1.44s).
+  - Playwright E2E: 26/26 lulus 100% (termasuk `tests/strategy-management.spec.ts` di viewport Desktop & Mobile).
+
+- **Permintaan**: Membaca [AUDIT_REPORT.md](AUDIT_REPORT.md) dan [CODE_QUALITY.md](CODE_QUALITY.md) hasil audit senior, serta memasukkannya ke dalam konteks sistem agar seluruh pengerjaan selanjutnya memenuhi best practice dan target arsitektur senior.
+- **Hasil Pemahaman & Integrasi**:
+  1. **Invarian Jalur Uang (M1 - M12)**:
+     - M1: Fail-closed; tidak ada saldo/spread/SL/TP palsu bawaan.
+     - M2: Guard mode akun tunggal fail-closed (`assert_demo_account()`) sebelum setiap `order_send`.
+     - M3: Satu jalur eksekusi tunggal via adapter (`src/trading_agent/adapters/mt5.py`).
+     - M4: Stop Loss wajib; tolak order tanpa SL.
+     - M5: Volume dinormalisasi ke spesifikasi simbol MT5 dan lolos `risk_engine`.
+     - M6: Idempotency key wajib di setiap order.
+     - M7: Mode simulasi via konfigurasi server/DI, dilarang dari payload request klien.
+     - M8: Tidak ada `except Exception` yang menelan kegagalan di jalur uang.
+     - M9: Data pasar diambil berdasarkan tuple `(simbol, interval)` lengkap.
+     - M10: Konstanta terpusat tanpa magic number.
+     - M11: Test-first, perubahan minimal, anti-regresi.
+     - M12: Endpoint pengubah state/uang diproteksi token dan bind ke loopback `127.0.0.1`.
+  2. **Temuan Kunci Audit (F1 - F16)**:
+     - F1 (Autopilot fail-open di akun REAL), F2 (Order tanpa SL/risk control), F3 (Dua jalur eksekusi paralel), F4 (43 endpoint tanpa autentikasi, docker exposed), F5 (Mode simulasi dari payload), F6 (Interval candle autopilot salah), F7 (Nilai fallback palsu 587.35), F8 (Cache global tanpa lock), F9 (Kompleksitas tinggi CC 73), F10-F16 (Cakupan test, dependensi CVE, kode mati).
+  3. **Penyelarasan Konteks**:
+     - Dokumen [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) diperbarui secara komprehensif memuat temuan F1-F16, aturan M1-M12, dan urutan roadmap Tahap 0 hingga Tahap 6.
+- **Verifikasi**:
+  - Konsistensi dokumen lokal dan status rencana selaras dengan temuan audit.
 
 ### 2026-10-06 — Penyelesaian Penuh Merge Conflicts dan Perbaikan Seluruh Error IDE (Python & TSX)
 

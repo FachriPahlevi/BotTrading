@@ -1,3 +1,5 @@
+import type { StrategyPlanItem, VisualOverlayData, SeasonalityAndTiming } from './strategy'
+
 export interface ChartOverlayItem {
   type: string
   label: string
@@ -27,15 +29,57 @@ export interface AiScenario {
   rationale?: string
 }
 
+export interface AgentInfo {
+  id: string
+  name: string
+  description?: string
+}
+
+export interface AgentConsensus {
+  bias: string
+  agreement_ratio: string
+  average_confidence: number
+  votes: {
+    LONG: number
+    SHORT: number
+    WAIT: number
+    [key: string]: number
+  }
+  total_agents: number
+  summary: string
+}
+
 export interface AiAnalysisResult {
   symbol: string
   interval: string
   generated_at?: string
-  bias: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'LONG' | 'SHORT'
+  bias: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'LONG' | 'SHORT' | 'WAIT'
   confidence?: number
   confidence_percent?: number
   summary?: string
   provider?: string
+  provider_id?: string
+  provider_name?: string
+  agent_id?: string
+  status?: 'ok' | 'failed' | 'skipped' | 'insufficient_data' | 'success' | 'warning' | 'error'
+  error_code?: string | null
+  error_message?: string
+  decision?: 'TRADE' | 'WAIT' | string
+  tradable?: boolean
+  primary_agent?: string
+  date_str?: string
+  last_price?: number
+  key_resistance?: string | number
+  key_support?: string | number
+  record_change?: string
+  conclusion?: string
+  fundamental?: string[]
+  technical?: string[]
+  volume?: string
+  seasonality_and_timing?: SeasonalityAndTiming
+  plans?: StrategyPlanItem[]
+  invalidation?: string
+  visual_data?: VisualOverlayData
   key_levels?: {
     support: number[]
     resistance: number[]
@@ -48,4 +92,11 @@ export interface AiAnalysisResult {
   chart_overlays?: ChartOverlayItem[]
   rationale?: string[]
   disclaimer?: string
+
+  // Multi-Agent Comparison Fields
+  multi_agent?: boolean
+  selected_agents?: string[]
+  available_agents?: AgentInfo[]
+  consensus?: AgentConsensus
+  agent_results?: Record<string, AiAnalysisResult>
 }

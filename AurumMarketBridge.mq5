@@ -1,13 +1,16 @@
 #property strict
-#property version "1.3"
+#property version "2.0"
 
 input string ApiUrl = "http://127.0.0.1:8000/api/mt5/candles";
-input int CandleCount = 500; // Jumlah candle per timeframe (dinaikkan dari 160 untuk akurasi indikator & warm-up)
-input int RequestTimeoutMs = 2000;
+input int InitialCandleCount = 800;        // Jumlah candle saat initial synchronization
+input int IncrementalCandleCount = 2;      // Jumlah candle saat incremental update (2 candle terbaru)
+input int SyncIntervalSeconds = 15;        // Interval timer pengiriman (detik)
+input int RequestTimeoutMs = 2000;         // Timeout HTTP request (ms)
 // Empty means derive /api/mt5/account from the existing candle URL.
 input string AccountApiUrl = "";
 
 ENUM_TIMEFRAMES Timeframes[6] = {PERIOD_M1, PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4, PERIOD_D1};
+bool InitialSyncDone = false;
 
 string IntervalName(ENUM_TIMEFRAMES timeframe) {
    if(timeframe == PERIOD_M1) return "1m";
@@ -23,7 +26,8 @@ string ResponseText(char &response[]) {
 }
 
 int OnInit() {
-   EventSetTimer(15);
+   InitialSyncDone = false;
+   EventSetTimer(SyncIntervalSeconds);
    OnTimer();
    return(INIT_SUCCEEDED);
 }
@@ -32,21 +36,30 @@ void OnDeinit(const int reason) {
    EventKillTimer();
 }
 
-void SendCandlesForTimeframe(ENUM_TIMEFRAMES tf) {
+bool SendCandlesForTimeframe(ENUM_TIMEFRAMES tf, int count) {
    MqlRates rates[];
    ArraySetAsSeries(rates, false);
-   int copied = CopyRates(_Symbol, tf, 0, CandleCount, rates);
-   if(copied < 60) {
-      Print("Aurum bridge skipped ", IntervalName(tf), ": only ", copied, " candles available; needs 60.");
-      return;
+   int copied = CopyRates(_Symbol, tf, 0, count, rates);
+   if(copied <= 0) {
+      Print("Aurum bridge skipped ", IntervalName(tf), ": no rates copied from terminal. Error code: ", GetLastError());
+      return false;
    }
 
    string body = StringFormat("{\"symbol\":\"%s\",\"interval\":\"%s\",\"candles\":[", _Symbol, IntervalName(tf));
    for(int index = 0; index < copied; index++) {
       if(index > 0) body += ",";
-      body += StringFormat("{\"time\":%I64d,\"open\":%.8f,\"high\":%.8f,\"low\":%.8f,\"close\":%.8f,\"volume\":%I64d}", (long)rates[index].time * 1000, rates[index].open, rates[index].high, rates[index].low, rates[index].close, (long)rates[index].tick_volume);
+      body += StringFormat(
+         "{\"time\":%I64d,\"open\":%.8f,\"high\":%.8f,\"low\":%.8f,\"close\":%.8f,\"volume\":%I64d}",
+         (long)rates[index].time * 1000,
+         rates[index].open,
+         rates[index].high,
+         rates[index].low,
+         rates[index].close,
+         (long)rates[index].tick_volume
+      );
    }
    body += "]}";
+
    char request[], response[];
    StringToCharArray(body, request, 0, -1, CP_UTF8);
    ArrayResize(request, ArraySize(request) - 1);
@@ -55,19 +68,42 @@ void SendCandlesForTimeframe(ENUM_TIMEFRAMES tf) {
    int status = WebRequest("POST", ApiUrl, "Content-Type: application/json\r\n", RequestTimeoutMs, request, response, response_headers);
    if(status == -1) {
       Print("Aurum bridge request failed for ", IntervalName(tf), ". Error code: ", GetLastError());
-      return;
+      return false;
    }
    if(status != 200) {
       Print("Aurum bridge rejected ", IntervalName(tf), ". HTTP status: ", status, ". Check API Log sistem.");
-      return;
+      return false;
    }
-   Print("Aurum bridge sent ", _Symbol, " ", IntervalName(tf), ": ", copied, " candles. API response: ", ResponseText(response));
+
+   Print("Aurum bridge sent ", _Symbol, " ", IntervalName(tf), " (", copied, " candles). API response: ", ResponseText(response));
+   return true;
 }
 
 void OnTimer() {
-   for(int i = 0; i < 6; i++) {
-      SendCandlesForTimeframe(Timeframes[i]);
+   if(!InitialSyncDone) {
+      Print("Aurum bridge: Starting initial sync (", InitialCandleCount, " candles x 6 timeframes)...");
+      bool all_success = true;
+      for(int i = 0; i < 6; i++) {
+         bool ok = SendCandlesForTimeframe(Timeframes[i], InitialCandleCount);
+         if(!ok) {
+            all_success = false;
+            Print("Aurum bridge: Initial sync failed for timeframe ", IntervalName(Timeframes[i]), ". Will retry next cycle.");
+         }
+      }
+      if(all_success) {
+         InitialSyncDone = true;
+         Print("Aurum bridge: Initial sync COMPLETED for all timeframes! Switching to incremental sync (", IncrementalCandleCount, " candles).");
+      } else {
+         Print("Aurum bridge: Initial sync INCOMPLETE. Retrying in ", SyncIntervalSeconds, " seconds.");
+      }
    }
+   else {
+      // Incremental sync (2 candle terbaru per timeframe)
+      for(int i = 0; i < 6; i++) {
+         SendCandlesForTimeframe(Timeframes[i], IncrementalCandleCount);
+      }
+   }
+
    SendAccount();
 }
 
